@@ -3,6 +3,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 import * as esbuild from "esbuild";
+import postcss from "postcss";
+import tailwindcss from "tailwindcss";
 
 /**
  * Validate step of the pipeline (see CLAUDE.md "Generation: fixed contract"). esbuild
@@ -13,6 +15,14 @@ import * as esbuild from "esbuild";
  * Approach: write the generated TSX plus the two SDK files to a temp directory alongside a
  * small bootstrap entry file, then let esbuild bundle from real files on disk — simpler and
  * more reliable than an in-memory virtual-module esbuild plugin for this scope.
+ *
+ * Also compiles a matching Tailwind stylesheet, scoped to only the classes the generated code
+ * actually uses. This is necessary, not cosmetic: the sandboxed iframe is a wholly separate
+ * document with no access to our compiled app stylesheet or our `:root` CSS variables, so
+ * without this every Tailwind className in generated code would render completely unstyled.
+ * The generation prompt is told to use plain Tailwind palette classes (e.g. `bg-sky-500`), not
+ * our semantic aliases (`bg-primary`) — those resolve to `hsl(var(--primary))`, and that
+ * variable only exists in our own app's document, not the iframe's.
  */
 
 export interface CompileError {
@@ -23,7 +33,7 @@ export interface CompileError {
 }
 
 export type CompileResult =
-  | { ok: true; code: string }
+  | { ok: true; code: string; css: string }
   | { ok: false; errors: CompileError[] };
 
 const SDK_DIR = path.join(process.cwd(), "sdk");
@@ -72,12 +82,28 @@ export async function compileActivity(generatedTsx: string): Promise<CompileResu
     if (!output) {
       return { ok: false, errors: [{ message: "esbuild produced no output" }] };
     }
-    return { ok: true, code: output };
+
+    const css = await compileTailwind(generatedTsx);
+    return { ok: true, code: output, css };
   } catch (err) {
     return { ok: false, errors: extractEsbuildErrors(err) };
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+}
+
+// JIT-compiles Tailwind directly against the generated source string — Tailwind's `raw`
+// content entry means no temp file is needed for this half of the pipeline. Deliberately a
+// bare Tailwind config (default palette + preflight base reset only, no theme.extend) since
+// our own tailwind.config.ts's semantic tokens depend on CSS variables the iframe doesn't have.
+async function compileTailwind(generatedTsx: string): Promise<string> {
+  const result = await postcss([
+    tailwindcss({
+      content: [{ raw: generatedTsx, extension: "tsx" }],
+      corePlugins: { preflight: true },
+    }),
+  ]).process("@tailwind base; @tailwind utilities;", { from: undefined });
+  return result.css;
 }
 
 // Reduce to just the basename — the repair prompt only needs to know it was "Activity.tsx"
