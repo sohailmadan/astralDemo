@@ -1,0 +1,70 @@
+description: >
+  Generation pipeline regression suite — run manually before any meaningful change to the
+  system prompt or contract in lib/ai/generateActivity.ts (see CLAUDE.md "Reliability").
+  Calls the real generateActivityCode + compileActivity pipeline via evals/run-generation.ts,
+  not a mock — this is checking actual production behavior, including real OpenRouter latency.
+  Run with: bunx promptfoo eval -c evals/generation.eval.yaml --max-concurrency 3
+
+providers:
+  - "exec:bun run evals/run-generation.ts"
+
+prompts:
+  - "{{prompt}}"
+
+defaultTest:
+  assert:
+    # The pipeline's own compile step is the ground truth for "did this work" — an activity
+    # that fails to compile has failed the eval regardless of anything else about it.
+    - type: javascript
+      value: JSON.parse(output).compiled === true
+
+    # The fixed SDK contract (CLAUDE.md "Generation: fixed contract") — a generated activity
+    # that doesn't use the tutor bridge or register any action has failed the brief's actual
+    # requirement even if it happens to compile.
+    - type: javascript
+      value: JSON.parse(output).code.includes("useTutorBridge")
+    - type: javascript
+      value: JSON.parse(output).code.includes("registerAction")
+    - type: javascript
+      value: JSON.parse(output).actions.length > 0
+
+    # Non-negotiable UX rules from the system prompt — checked here because a prompt edit
+    # elsewhere could silently regress these without breaking compilation at all.
+    - type: javascript
+      value: JSON.parse(output).code.includes("emitEvent")
+
+    # Generalization requirement (brief, "Requirements" section): must never fall back to
+    # semantic Tailwind aliases that don't resolve inside the sandbox.
+    - type: javascript
+      value: |
+        !/\b(bg|text|border)-(primary|secondary|foreground|background|accent|muted|destructive)\b/.test(JSON.parse(output).code)
+
+tests:
+  # The brief's own worked examples.
+  - vars:
+      prompt: "Teach me about y-intercept and slope."
+  - vars:
+      prompt: "Teach me how long division works."
+  - vars:
+      prompt: "Help me understand equivalent fractions."
+  - vars:
+      prompt: "Teach me how angles work."
+  - vars:
+      prompt: "Give me something interactive to practice counting numbers."
+
+  # Generalization checks (brief: "we should be able to enter learning requests you have not
+  # explicitly prepared for") — deliberately outside the worked examples above.
+  - vars:
+      prompt: "Help me understand the water cycle."
+  - vars:
+      prompt: "Teach me the difference between a metaphor and a simile."
+
+  # Exploratory, no-right-answer request — checks the state schema doesn't only work for
+  # quiz-shaped activities (CLAUDE.md "State is generic, not quiz-shaped").
+  - vars:
+      prompt: "Let me explore how changing the radius of a circle affects its area."
+
+  # Deliberately vague/low-signal input — checks the system reliably produces *something*
+  # reasonable rather than failing outright on an underspecified request.
+  - vars:
+      prompt: "math"
