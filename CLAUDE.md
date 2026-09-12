@@ -71,6 +71,19 @@ validated before a call ever reaches the iframe. Tutor tone is deliberately Socr
 wrong answer (ask the learner's reasoning before giving the answer away), short, warm — this
 is checked by `evals/tutor.eval.yaml`, easy for a prompt edit to quietly regress.
 
+Implemented in `lib/ai/tutor.ts` (context assembly, `computeProgressSummary`, tool-calling)
+and `app/api/tutor/route.ts` (fetches, calls it, persists both turns, returns the reply). A
+model-call failure here is caught and returned as a graceful 502, not a bare framework 500 —
+found by testing this against a live rate-limited OpenRouter key, not by inspection.
+
+**Known gap, not solved**: the generation contract only gives an action a `name` + plain-
+English `description`, no argument schema — so every tool in `lib/ai/tutor.ts` is registered
+with an empty input schema (`z.object({})`). Fine for a zero-argument action (`reset`), but an
+action that genuinely needs structured arguments (e.g. "set the angle to exactly 45°") gives
+the model nothing but prose to infer a shape from. Resolving this means extending the
+generation contract to have the LLM emit a Zod-describable args schema per action, which
+wasn't done here — flagged rather than quietly worked around.
+
 ## Safe execution boundary
 
 Compiled bundles render in a `srcdoc` iframe: `sandbox="allow-scripts"` only (deliberately no
@@ -81,6 +94,11 @@ handshake timeout that treats a non-responding frame as hung rather than leaving
 watchdog from outside the frame, since the frame's own thread is blocked). `ActivityFrame` is
 wrapped in a React error boundary on the host side — that boundary catches bugs in *our*
 bridge code, not the sandboxed activity, which can never reach the host thread at all.
+
+The iframe auto-sizes to the activity's real content height (an entry script inside it
+observes `document.documentElement` with a `ResizeObserver` and posts the measurement out —
+the host can't measure a cross-origin iframe directly), clamped to [300, 900]px so a runaway
+activity can't stretch the whole page; content past that scrolls inside the iframe instead.
 
 ## Which Supabase key does what — do not mix these up
 
@@ -144,11 +162,35 @@ change after discovering them"):
   `failed` activity as a bug to chase; read the *error message on that row* to tell timeout,
   upstream rate-limit, and genuine unfixed compile bug apart, since each means something
   different about the pipeline vs. the model vs. OpenRouter's shared free capacity that day.
+- **OpenRouter's daily free-tier request cap** — a fourth, distinct failure mode from the ones
+  above, discovered after extensive same-day testing: `"Rate limit exceeded: free-models-per-
+  day. Add 10 credits to unlock 1000 free model requests per day"` (HTTP 429). This is separate
+  from per-request rate limiting or a single model's latency — it's a hard daily ceiling on the
+  API key itself, shared across every model called through it (generation AND tutor calls both
+  draw from the same cap). Confirmed via OpenRouter's own `X-RateLimit-Reset` header that it
+  resets on a rolling daily basis, not something retries or a different model choice can work
+  around. This is a real constraint on how much same-day iteration/eval-running is possible on
+  a free-tier key, named here rather than glossed over — see the README's tradeoffs section.
+- **`generateActivityCode`'s `abortSignal` was widened from 120s to 600s (10 minutes)** after
+  repeated real-world timeouts at 120s that were genuinely still in-progress calls, not hangs.
+  Real cost, explicitly not hidden: 3 attempts at 10 minutes each is a 30-minute worst case,
+  which exceeds Vercel's serverless ceiling even on Pro + Fluid Compute — `maxDuration` on the
+  generate route is capped at 800s (the platform's practical limit) rather than matched to that
+  worst case, which is unreachable in a real deployment regardless of this setting. Appropriate
+  for local testing (`bun run start`, no wall-clock kill) while confirming the pipeline can
+  succeed at all; not the production-ready number.
 
 ## Milestone/cut order, if time runs out
 
 Voice (Fish Audio) is cut first, then Milestone 4 polish, then breadth of test prompts. Never
 cut: the core generate -> validate -> execute -> render loop, or tutor state visibility.
+
+Status: Milestones 1–3 built and unit-tested (`bun test`); both eval suites
+(`evals/generation.eval.yaml`, `evals/tutor.eval.yaml`) written and wired to the real
+pipelines, not mocks. A full green eval run for both, and a genuine end-to-end tutor
+conversation against a live model call, are still blocked on the OpenRouter daily rate limit
+above — verify both the moment that clears, before considering Milestone 3 done rather than
+just built. Milestone 4 (polish) and voice are not started.
 
 ## Confidentiality
 
