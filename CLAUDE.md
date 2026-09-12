@@ -105,6 +105,46 @@ silently stranding a row at `generating` forever. This is not a durable queue (n
 killed mid-callback) — acceptable at this scale, would not be under real production traffic
 (see the plan doc's "what I'd improve").
 
+## Reliability — what was actually observed, not assumed
+
+Real findings from testing the generation pipeline against live OpenRouter free models (the
+brief explicitly asks for this account — "what failure modes did you discover, what did you
+change after discovering them"):
+
+- **openai/gpt-oss-120b:free / openai/gpt-oss-20b:free** (originally planned) — discontinued
+  from the free tier between planning and implementation. Confirms the plan's own warning that
+  free-tier lineups shift; always verify against OpenRouter's live `/api/v1/models` before
+  wiring a model in.
+- **nvidia/nemotron-3-super-120b-a12b:free** — hung for 18+ minutes with no response and no
+  error on one call. This is why `generateActivityCode` has an explicit `abortSignal` timeout —
+  without it, one stalled call would block the entire pipeline indefinitely. Kept as the
+  fallback model, not primary.
+- **google/gemma-4-26b-a4b-it:free** — failed fast (~6s), but only because Google AI Studio's
+  own shared free quota was exhausted upstream (a distinct failure mode: availability, not
+  latency). Not used as primary for this reason — a model rejected here would be a fine choice
+  again once that shared quota isn't the bottleneck.
+- **cohere/north-mini-code:free** (current primary) — the one that actually produced excellent
+  output when it worked: a genuinely good draggable coordinate-plane slope-explorer with a
+  registered `reset` action, correct `publishState`/`emitEvent` usage, matching the brief's
+  "real interactive software" bar, not an article. Two real, distinct failure modes observed
+  and both handled by design, not patched around after the fact:
+  1. Wraps valid JSON in a ` ```json ` markdown fence despite the schema instruction — handled
+     by `generateActivity.ts`'s `repairText` hook, which strips the fence before the SDK
+     re-parses, rather than avoiding an otherwise-good model for this.
+  2. Variable latency (60s to 120s+) for its typically-verbose (~20k+ token) output — the
+     `abortSignal` timeout and `maxDuration` are both sized against this measured behavior, not
+     guessed.
+  3. Also produced a genuine compile bug once (reassigning a `const`) that survived the full
+     repair loop (2 attempts) unfixed — the pipeline correctly reported `status: failed` with
+     the real compile error rather than a disguised success. This is the repair loop's
+     documented limit working as designed, not a bug in our code.
+- **What this means in practice**: free-tier model reliability is genuinely variable, exactly
+  as the plan anticipated — the repair loop, bounded retries, and honest `failed` state are
+  load-bearing, not defensive programming for a hypothetical. Do not read an occasional
+  `failed` activity as a bug to chase; read the *error message on that row* to tell timeout,
+  upstream rate-limit, and genuine unfixed compile bug apart, since each means something
+  different about the pipeline vs. the model vs. OpenRouter's shared free capacity that day.
+
 ## Milestone/cut order, if time runs out
 
 Voice (Fish Audio) is cut first, then Milestone 4 polish, then breadth of test prompts. Never

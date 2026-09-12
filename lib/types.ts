@@ -17,6 +17,8 @@ export interface Activity {
   status: ActivityStatus;
   title: string | null;
   code: string | null;
+  compiled_js: string | null;
+  compiled_css: string | null;
   actions: ActivityAction[];
   last_state: Record<string, unknown> | null;
   error: string | null;
