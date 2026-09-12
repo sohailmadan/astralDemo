@@ -16,15 +16,17 @@ export default async function GeneratePage() {
           Generative Interactive Learning
         </h1>
         <p className="text-sm text-muted-foreground">
-          Describe what you want to learn. You&rsquo;ll get a generated, interactive activity
-          with an AI tutor — not an article.
+          Describe what you want to learn. You&rsquo;ll get a generated,
+          interactive activity with an AI tutor.
         </p>
       </header>
 
       <PromptForm />
 
       <section className="flex flex-col gap-3">
-        <h2 className="text-sm font-medium text-muted-foreground">Your activities</h2>
+        <h2 className="text-sm font-medium text-muted-foreground">
+          Your activities
+        </h2>
         <ActivityList initialActivities={activities} />
       </section>
     </main>
