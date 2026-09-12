@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
+import { GenerationProgress } from "@/components/generate/generation-progress";
 import { StatusBadge } from "@/components/generate/status-badge";
 import { createClient } from "@/lib/supabase/client";
 import type { Activity } from "@/lib/types";
@@ -76,6 +77,9 @@ function ActivityRow({ activity }: { activity: Activity }) {
         <p className="truncate text-sm font-medium text-foreground">{title}</p>
         {activity.status === "failed" && activity.error && (
           <p className="mt-0.5 truncate text-xs text-destructive">{activity.error}</p>
+        )}
+        {activity.status === "generating" && (
+          <GenerationProgress attempt={activity.generation_attempt} />
         )}
       </div>
       <StatusBadge status={activity.status} />

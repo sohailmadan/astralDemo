@@ -2,6 +2,7 @@ import { after } from "next/server";
 import { NextResponse } from "next/server";
 
 import { generateActivityCode } from "@/lib/ai/generateActivity";
+import { MAX_REPAIR_ATTEMPTS } from "@/lib/generation-constants";
 import { compileActivity, type CompileError } from "@/lib/sandbox/compile";
 import { createServiceClient } from "@/lib/supabase/service";
 
@@ -13,7 +14,6 @@ import { createServiceClient } from "@/lib/supabase/service";
 export const maxDuration = 500;
 
 const MAX_PROMPT_LENGTH = 500;
-const MAX_REPAIR_ATTEMPTS = 2;
 
 export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
@@ -50,6 +50,13 @@ async function runGenerationPipeline(activityId: string, prompt: string) {
   let lastFailure = "Generation failed for an unknown reason.";
 
   for (let attempt = 0; attempt <= MAX_REPAIR_ATTEMPTS; attempt++) {
+    // 1-indexed for display ("attempt 1 of 3", not "0 of 3") — written before the (slow) AI
+    // call so the UI can show which attempt is in flight, not just "generating" undifferentiated.
+    await supabase
+      .from("activities")
+      .update({ generation_attempt: attempt + 1 })
+      .eq("id", activityId);
+
     try {
       const generation = await generateActivityCode(prompt, { priorAttempt });
       const compiled = await compileActivity(generation.code);

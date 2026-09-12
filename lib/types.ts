@@ -20,6 +20,7 @@ export interface Activity {
   compiled_js: string | null;
   compiled_css: string | null;
   actions: ActivityAction[];
+  generation_attempt: number;
   last_state: Record<string, unknown> | null;
   error: string | null;
   created_at: string;

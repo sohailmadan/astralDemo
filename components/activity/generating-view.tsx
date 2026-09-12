@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
+import { GenerationProgress } from "@/components/generate/generation-progress";
 import { createClient } from "@/lib/supabase/client";
 
 /**
@@ -11,8 +12,18 @@ import { createClient } from "@/lib/supabase/client";
  * this one row so it flips over live once generation finishes, with no manual refresh — the
  * same guarantee the Generate page's list has, extended to this edge case. See CLAUDE.md
  * "Render" step 7's direct-URL note.
+ *
+ * `router.refresh()` on every update (not just the final ready/failed one) is what also keeps
+ * the attempt-number progress display current as the pipeline moves through repair attempts,
+ * not only when it finishes.
  */
-export function GeneratingView({ activityId }: { activityId: string }) {
+export function GeneratingView({
+  activityId,
+  attempt,
+}: {
+  activityId: string;
+  attempt: number;
+}) {
   const router = useRouter();
 
   useEffect(() => {
@@ -42,6 +53,7 @@ export function GeneratingView({ activityId }: { activityId: string }) {
       <p className="text-sm text-muted-foreground">
         Generating your activity — this page will update automatically.
       </p>
+      <GenerationProgress attempt={attempt} />
     </div>
   );
 }
