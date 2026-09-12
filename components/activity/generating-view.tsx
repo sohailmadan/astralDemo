@@ -60,7 +60,11 @@ export function GeneratingView({
       <p className="text-sm text-muted-foreground">
         Generating your activity — this page will update automatically.
       </p>
-      {isStale ? <StalledNotice prompt={prompt} /> : <GenerationProgress attempt={attempt} />}
+      {isStale ? (
+        <StalledNotice prompt={prompt} />
+      ) : (
+        <GenerationProgress createdAt={createdAt} attempt={attempt} />
+      )}
     </div>
   );
 }

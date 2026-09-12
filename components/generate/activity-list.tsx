@@ -85,7 +85,7 @@ function ActivityRow({ activity }: { activity: Activity }) {
           (isStale ? (
             <StalledNotice prompt={activity.prompt} />
           ) : (
-            <GenerationProgress attempt={activity.generation_attempt} />
+            <GenerationProgress createdAt={activity.created_at} attempt={activity.generation_attempt} />
           ))}
       </div>
       <StatusBadge status={activity.status} />
