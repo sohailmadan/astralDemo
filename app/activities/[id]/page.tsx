@@ -24,7 +24,12 @@ export default async function LearnPage({ params }: { params: Promise<{ id: stri
   if (activity.status === "generating") {
     return (
       <main className="mx-auto min-h-screen w-full max-w-2xl px-5 py-16">
-        <GeneratingView activityId={activity.id} attempt={activity.generation_attempt} />
+        <GeneratingView
+          activityId={activity.id}
+          prompt={activity.prompt}
+          createdAt={activity.created_at}
+          attempt={activity.generation_attempt}
+        />
       </main>
     );
   }

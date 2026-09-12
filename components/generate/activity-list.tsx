@@ -4,9 +4,11 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 import { GenerationProgress } from "@/components/generate/generation-progress";
+import { StalledNotice } from "@/components/generate/stalled-notice";
 import { StatusBadge } from "@/components/generate/status-badge";
 import { createClient } from "@/lib/supabase/client";
 import type { Activity } from "@/lib/types";
+import { useIsStale } from "@/lib/use-is-stale";
 
 /**
  * Realtime-subscribed activity list. Subscribes to BOTH insert and update events on
@@ -70,6 +72,7 @@ export function ActivityList({ initialActivities }: { initialActivities: Activit
 
 function ActivityRow({ activity }: { activity: Activity }) {
   const title = activity.title ?? activity.prompt;
+  const isStale = useIsStale(activity.created_at, activity.status);
 
   const content = (
     <div className="flex items-center justify-between gap-4 p-4">
@@ -78,9 +81,12 @@ function ActivityRow({ activity }: { activity: Activity }) {
         {activity.status === "failed" && activity.error && (
           <p className="mt-0.5 truncate text-xs text-destructive">{activity.error}</p>
         )}
-        {activity.status === "generating" && (
-          <GenerationProgress attempt={activity.generation_attempt} />
-        )}
+        {activity.status === "generating" &&
+          (isStale ? (
+            <StalledNotice prompt={activity.prompt} />
+          ) : (
+            <GenerationProgress attempt={activity.generation_attempt} />
+          ))}
       </div>
       <StatusBadge status={activity.status} />
     </div>

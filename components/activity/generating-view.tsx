@@ -4,7 +4,9 @@ import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
 import { GenerationProgress } from "@/components/generate/generation-progress";
+import { StalledNotice } from "@/components/generate/stalled-notice";
 import { createClient } from "@/lib/supabase/client";
+import { useIsStale } from "@/lib/use-is-stale";
 
 /**
  * Shown when the Learn page is opened (direct URL, refresh, back button — not only via the
@@ -19,11 +21,16 @@ import { createClient } from "@/lib/supabase/client";
  */
 export function GeneratingView({
   activityId,
+  prompt,
+  createdAt,
   attempt,
 }: {
   activityId: string;
+  prompt: string;
+  createdAt: string;
   attempt: number;
 }) {
+  const isStale = useIsStale(createdAt, "generating");
   const router = useRouter();
 
   useEffect(() => {
@@ -53,7 +60,7 @@ export function GeneratingView({
       <p className="text-sm text-muted-foreground">
         Generating your activity — this page will update automatically.
       </p>
-      <GenerationProgress attempt={attempt} />
+      {isStale ? <StalledNotice prompt={prompt} /> : <GenerationProgress attempt={attempt} />}
     </div>
   );
 }
