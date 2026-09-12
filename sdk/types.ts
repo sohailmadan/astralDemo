@@ -27,7 +27,11 @@ export type ActivityToHostMessage =
   | { type: "READY" }
   | { type: "STATE_SNAPSHOT"; state: Record<string, unknown> }
   | { type: "EVENT"; eventType: string; payload: unknown }
-  | { type: "ACTION_RESULT"; name: string; ok: boolean; error?: string };
+  | { type: "ACTION_RESULT"; name: string; ok: boolean; error?: string }
+  // Sent by the entry script (lib/sandbox/compile.ts's ENTRY_SOURCE), not by generated
+  // activity code or the useTutorBridge SDK — host-rendering plumbing, not part of the
+  // tutor-facing contract.
+  | { type: "RESIZE"; height: number };
 
 export type HostToActivityMessage = {
   type: "ACTION_CALL";

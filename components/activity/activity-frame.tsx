@@ -8,6 +8,14 @@ import type { ActivityToHostMessage } from "@/sdk/types";
 
 const READY_TIMEOUT_MS = 5000;
 
+// Bounds for the auto-sizing iframe (see the RESIZE message below). MIN keeps a short activity
+// from collapsing to an awkward sliver before its first real measurement arrives; MAX is a
+// deliberate ceiling so a runaway/buggy activity can't stretch the whole page — content taller
+// than that scrolls inside the iframe instead (the browser's default iframe overflow), which
+// is an honest degraded state, not a silent failure.
+const MIN_IFRAME_HEIGHT = 300;
+const MAX_IFRAME_HEIGHT = 900;
+
 /**
  * Renders the compiled activity inside a sandboxed iframe. See CLAUDE.md "Safely execute" —
  * `sandbox="allow-scripts"` only (deliberately no `allow-same-origin`) is what isolates this
@@ -22,6 +30,7 @@ const READY_TIMEOUT_MS = 5000;
 export function ActivityFrame({ activity }: { activity: Activity }) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "hung">("loading");
+  const [height, setHeight] = useState(MIN_IFRAME_HEIGHT);
 
   const srcDoc =
     activity.compiled_js && activity.compiled_css !== null
@@ -45,6 +54,10 @@ export function ActivityFrame({ activity }: { activity: Activity }) {
       if (data.type === "READY") {
         clearTimeout(timeout);
         setStatus("ready");
+      }
+
+      if (data.type === "RESIZE") {
+        setHeight(Math.min(MAX_IFRAME_HEIGHT, Math.max(MIN_IFRAME_HEIGHT, data.height)));
       }
       // STATE_SNAPSHOT / EVENT / ACTION_RESULT handling lands in Milestone 3 with the tutor.
     }
@@ -80,7 +93,8 @@ export function ActivityFrame({ activity }: { activity: Activity }) {
         srcDoc={srcDoc}
         sandbox="allow-scripts"
         title={activity.title ?? "Generated activity"}
-        className="h-[600px] w-full bg-white"
+        className="w-full bg-white transition-[height] duration-150"
+        style={{ height }}
       />
     </div>
   );

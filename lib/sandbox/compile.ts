@@ -45,6 +45,21 @@ import Activity from "./Activity";
 const container = document.getElementById("root");
 if (!container) throw new Error("root element missing");
 createRoot(container).render(<Activity />);
+
+// Reports real content height to the host so it can size the iframe to fit (see
+// components/activity/activity-frame.tsx) instead of a fixed height that wastes space on a
+// short activity or clips/scrolls a tall one. Not part of the useTutorBridge() SDK contract —
+// this is host-rendering plumbing the generated code never needs to know about.
+let lastReportedHeight = 0;
+function reportHeight() {
+  const height = Math.ceil(document.documentElement.getBoundingClientRect().height);
+  if (height !== lastReportedHeight) {
+    lastReportedHeight = height;
+    window.parent.postMessage({ type: "RESIZE", height }, "*");
+  }
+}
+new ResizeObserver(reportHeight).observe(document.documentElement);
+reportHeight();
 `;
 
 export async function compileActivity(generatedTsx: string): Promise<CompileResult> {

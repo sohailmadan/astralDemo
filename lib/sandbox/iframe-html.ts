@@ -22,8 +22,11 @@ export function buildActivityIframeHtml(js: string, css: string): string {
 <meta charset="utf-8" />
 <meta http-equiv="Content-Security-Policy" content="${csp}" />
 <style>
+  /* No min-height on #root: the entry script measures real content height and reports it to
+     the host (see compile.ts's ENTRY_SOURCE) so the host can size the iframe to fit. A
+     vh-based min-height here would feed back on itself — it would always report "full height
+     of whatever the iframe currently is," never the content's actual size. */
   html, body { margin: 0; padding: 0; }
-  #root { min-height: 100vh; }
 </style>
 <style>${css}</style>
 </head>
