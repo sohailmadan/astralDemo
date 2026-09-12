@@ -5,6 +5,7 @@ import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { generateActivity } from "@/lib/api-client";
 import { EXAMPLE_PROMPTS } from "@/lib/example-prompts";
 
 const MAX_PROMPT_LENGTH = 500;
@@ -30,15 +31,7 @@ export function PromptForm() {
     setIsSubmitting(true);
     setError(null);
     try {
-      const res = await fetch("/api/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: trimmed }),
-      });
-      if (!res.ok) {
-        const body = await res.json().catch(() => null);
-        throw new Error(body?.error ?? "Something went wrong. Please try again.");
-      }
+      await generateActivity(trimmed);
       setPrompt("");
       router.refresh();
     } catch (err) {
