@@ -6,7 +6,8 @@
     "start": "next start",
     "lint": "eslint .",
     "test": "bun test",
-    "eval:generation": "promptfoo eval -c evals/generation.eval.yaml --max-concurrency 3"
+    "eval:generation": "promptfoo eval -c evals/generation.eval.yaml --max-concurrency 3",
+    "eval:tutor": "promptfoo eval -c evals/tutor.eval.yaml --max-concurrency 3"
   },
   "dependencies": {
     "@openrouter/ai-sdk-provider": "^3.0.0",

@@ -1,0 +1,97 @@
+description: >
+  Tutor behavior regression suite — run manually before any meaningful change to the system
+  prompt/tool-calling in lib/ai/tutor.ts (see CLAUDE.md "AI tutor <-> activity interface").
+  Calls the real getTutorReply pipeline via evals/run-tutor.ts against fixed fixtures (not a
+  mock), so each test checks specific behavior — Socratic-on-wrong, state-grounding, correct
+  action-calling — without depending on whatever a prior eval run left in the database.
+  Run with: bunx promptfoo eval -c evals/tutor.eval.yaml --max-concurrency 3
+
+providers:
+  - "exec:bun run evals/run-tutor.ts"
+
+prompts:
+  - "{{fixture}}"
+
+tests:
+  # Socratic-on-wrong-answer: the learner just got something wrong. The tutor should ask them
+  # to walk through their thinking, not immediately hand over the correct answer.
+  - vars:
+      fixture: >
+        {"prompt":"Teach me equivalent fractions.","title":"Equivalent Fractions Match",
+        "lastState":{"submittedAnswer":"3/8","targetFraction":"1/2","correct":false},
+        "events":[{"type":"answer_submitted","payload":{"answer":"3/8","correct":false}}],
+        "userMessage":"I don't get why that was wrong."}
+    assert:
+      - type: javascript
+        value: JSON.parse(output).content.includes("?")
+      - type: javascript
+        value: |
+          !/\b(the correct answer is|the right answer is|the answer is)\b/i.test(JSON.parse(output).content)
+
+  # State-grounding: the tutor must answer from the actual state it was given, not a guess —
+  # this is the property that makes "the AI knows what happened" real rather than assumed.
+  - vars:
+      fixture: >
+        {"prompt":"Help me practice long division.","title":"Long Division Workspace",
+        "lastState":{"currentStep":3,"dividend":847,"divisor":7},
+        "events":[{"type":"step_completed","payload":{"step":1}},{"type":"step_completed","payload":{"step":2}}],
+        "userMessage":"What step am I on right now?"}
+    assert:
+      - type: javascript
+        value: JSON.parse(output).content.includes("3")
+
+  # Doesn't re-ask what the progress summary already answers.
+  - vars:
+      fixture: >
+        {"prompt":"Teach me about slope.","title":"Slope Explorer",
+        "lastState":{"slope":-2,"intercept":3},
+        "events":[{"type":"hint_requested"},{"type":"hint_requested"}],
+        "userMessage":"How many hints have I used so far?"}
+    assert:
+      - type: javascript
+        value: JSON.parse(output).content.includes("2")
+
+  # Action-calling: a clear, explicit request to do the one thing this activity's registered
+  # action does should actually invoke it, not just talk about it.
+  - vars:
+      fixture: >
+        {"prompt":"Teach me angles by dragging.","title":"Angles by Dragging",
+        "actions":[{"name":"reset","description":"Starts a new challenge with a freshly randomized target angle."}],
+        "lastState":{"targetAngle":90,"currentAngle":42},
+        "userMessage":"This one is too easy, can you give me a new one?"}
+    assert:
+      - type: javascript
+        value: JSON.parse(output).actionCall?.name === "reset"
+
+  # Restraint: the tutor should not invoke an action just because one exists — only when it's
+  # actually the right thing to do right now.
+  - vars:
+      fixture: >
+        {"prompt":"Teach me angles by dragging.","title":"Angles by Dragging",
+        "actions":[{"name":"reset","description":"Starts a new challenge with a freshly randomized target angle."}],
+        "lastState":{"targetAngle":90,"currentAngle":42},
+        "userMessage":"Hi! What am I supposed to do here?"}
+    assert:
+      - type: javascript
+        value: JSON.parse(output).actionCall === undefined
+
+  # Never claims a verdict the state doesn't actually contain — nothing has been submitted yet.
+  - vars:
+      fixture: >
+        {"prompt":"Teach me equivalent fractions.","title":"Equivalent Fractions Match",
+        "lastState":{},
+        "userMessage":"Was my last answer correct?"}
+    assert:
+      - type: javascript
+        value: |
+          !/\b(that's correct|that was correct|yes,? that'?s right|correct!)\b/i.test(JSON.parse(output).content)
+
+  # Short and concrete, not lecture-length — a chat reply, not an essay.
+  - vars:
+      fixture: >
+        {"prompt":"Teach me about the water cycle.","title":"Water Cycle Simulator",
+        "lastState":{"stage":"evaporation"},
+        "userMessage":"Can you explain what's happening right now?"}
+    assert:
+      - type: javascript
+        value: JSON.parse(output).content.length < 600
