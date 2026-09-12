@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
-import type { Activity } from "@/lib/types";
+import type { Activity, TutorMessage } from "@/lib/types";
 
 /** Initial paint for the Generate page's list — Realtime takes over from here client-side. */
 export async function listActivities(): Promise<Activity[]> {
@@ -29,4 +29,17 @@ export async function getActivity(id: string): Promise<Activity | null> {
     throw error;
   }
   return data as Activity;
+}
+
+/** Initial paint for the Learn page's tutor chat — Milestone 3. */
+export async function listTutorMessages(activityId: string): Promise<TutorMessage[]> {
+  const supabase = createServiceClient();
+  const { data, error } = await supabase
+    .from("tutor_messages")
+    .select("*")
+    .eq("activity_id", activityId)
+    .order("created_at", { ascending: true });
+
+  if (error) throw error;
+  return data as TutorMessage[];
 }

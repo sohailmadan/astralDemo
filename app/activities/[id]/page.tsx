@@ -1,9 +1,8 @@
 import { notFound } from "next/navigation";
 
-import { ActivityFrame } from "@/components/activity/activity-frame";
-import { ActivityErrorBoundary } from "@/components/activity/error-boundary";
+import { ActivityWorkspace } from "@/components/activity/activity-workspace";
 import { GeneratingView } from "@/components/activity/generating-view";
-import { getActivity } from "@/lib/supabase/queries";
+import { getActivity, listTutorMessages } from "@/lib/supabase/queries";
 
 // Always render per-request — status can change between requests, never a candidate for the
 // static/cached path Next's Cache Components mode defaults to.
@@ -43,18 +42,11 @@ export default async function LearnPage({ params }: { params: Promise<{ id: stri
     );
   }
 
+  const tutorMessages = await listTutorMessages(activity.id);
+
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-6 px-5 py-8 lg:flex-row">
-      <div className="min-w-0 flex-1">
-        <ActivityErrorBoundary>
-          <ActivityFrame activity={activity} />
-        </ActivityErrorBoundary>
-      </div>
-      <aside className="flex w-full flex-col lg:w-80 lg:shrink-0">
-        <div className="flex min-h-64 flex-1 items-center justify-center rounded-lg border border-border bg-card p-6 text-center">
-          <p className="text-xs text-muted-foreground">Tutor chat lands in Milestone 3.</p>
-        </div>
-      </aside>
+      <ActivityWorkspace activity={activity} initialMessages={tutorMessages} />
     </main>
   );
 }
