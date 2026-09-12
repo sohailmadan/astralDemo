@@ -21,8 +21,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ error: "Invalid body." }, { status: 400 });
   }
 
-  const supabase = createServiceClient();
-
   if (body.kind === "state") {
     const state = body.state;
     if (!state || typeof state !== "object" || Array.isArray(state)) {
@@ -32,6 +30,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({ error: "state payload too large." }, { status: 413 });
     }
 
+    const supabase = createServiceClient();
     const { error } = await supabase.from("activities").update({ last_state: state }).eq("id", id);
     if (error) return NextResponse.json({ error: "Could not store state." }, { status: 500 });
     return NextResponse.json({ ok: true });
@@ -46,6 +45,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ error: "payload too large." }, { status: 413 });
   }
 
+  const supabase = createServiceClient();
   const { error } = await supabase
     .from("activity_events")
     .insert({ activity_id: id, type: eventType, payload: body.payload ?? null });

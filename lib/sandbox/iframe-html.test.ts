@@ -19,4 +19,14 @@ describe("buildActivityIframeHtml", () => {
     expect(html).not.toContain("connect-src");
     expect(html).not.toContain("fetch");
   });
+
+  // Regression test: a `#root { min-height: 100vh }` rule here would feed back on itself once
+  // the entry script's ResizeObserver reports height to the host (see compile.ts's
+  // ENTRY_SOURCE and activity-frame.tsx) — it would always measure "100% of the iframe's
+  // current height," never the content's real size, so the iframe could never shrink to fit.
+  it("does not constrain #root's height, so the auto-sizing ResizeObserver can measure real content", () => {
+    const html = buildActivityIframeHtml("", "");
+
+    expect(html).not.toMatch(/#root\s*\{[^}]*min-height/);
+  });
 });
