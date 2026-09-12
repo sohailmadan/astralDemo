@@ -121,10 +121,22 @@ interface."
 
 ## Observability
 
-Langfuse, wired through the AI SDK's built-in OpenTelemetry hook (`instrumentation.ts` +
-`telemetry: { isEnabled: true }` on the generation call) — not a bespoke tracer. A trace
-captures the full prompt, the full parsed response, model, latency, and token usage for every
-generation attempt.
+Langfuse, via its direct HTTP client (`lib/trace.ts`, wrapping `langfuse`'s `.trace()`/
+`.generation()`/`.flushAsync()`) — every generation attempt is captured with the full system +
+user prompt, the full parsed response (title, code, actions), model, latency, and token usage.
+Verified directly against a real deployment: a real success shows the complete ~13k-token
+exchange; a real timeout failure shows `level: ERROR` with the actual error message — nothing
+truncated or summarized in either case.
+
+**Why the direct client, not OpenTelemetry** (worth recording as a real finding, not glossed
+over): the natural-looking approach — the AI SDK's `telemetry: { isEnabled: true }` flag,
+wired to Langfuse via `@langfuse/otel`'s `LangfuseSpanProcessor` through `@vercel/otel` — was
+tried first and never produced a verifiable trace, across three different wiring attempts.
+Root cause: `ai@7` replaced its OpenTelemetry-based telemetry with a new, incompatible
+event-dispatch system (`registerTelemetry`/`AI_SDK_TELEMETRY_INTEGRATIONS`) that Langfuse's
+current packages don't plug into. The direct HTTP client sidesteps that entirely — it's also
+simpler (no OTel provider registration, no `instrumentation.ts`) and every call in testing
+completed without a single thrown error, unlike the OTel path's silent non-delivery.
 
 To see traces: set `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, and `LANGFUSE_BASE_URL` (free
 tier at [cloud.langfuse.com](https://cloud.langfuse.com), no card required) in `.env.local`.

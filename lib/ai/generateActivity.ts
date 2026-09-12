@@ -1,6 +1,7 @@
 import { generateObject } from "ai";
 import { z } from "zod";
 
+import { traceGeneration } from "../trace";
 import { CODEGEN_MODEL, codegenModel } from "./openrouter";
 
 export const ActivityGenerationSchema = z.object({
@@ -102,24 +103,25 @@ ${opts.priorAttempt.error}
 Fix only what's broken and return the corrected activity in full.`
     : `Learning request: "${prompt}"`;
 
-  const { object } = await generateObject({
-    model: codegenModel(opts?.model ?? CODEGEN_MODEL),
-    schema: ActivityGenerationSchema,
-    system: SYSTEM_PROMPT,
-    prompt: userContent,
-    // 120s reflects real measured latency from testing, not a guess — this model's response
-    // time for a typically-verbose (~20k+ token) activity varies from ~60s to well over 90s.
-    // /api/generate's maxDuration is sized to fit 3 attempts at this timeout with margin, or
-    // the route itself gets killed by the platform before a legitimately-slow-but-working call
-    // finishes. See CLAUDE.md "Reliability" for the full account of what was tried and why.
-    abortSignal: AbortSignal.timeout(120_000),
-    repairText: stripMarkdownFence,
-    // Captured in Langfuse via instrumentation.ts's LangfuseSpanProcessor — prompt, response,
-    // model, latency, and token usage, with zero bespoke tracing code (see CLAUDE.md
-    // "Observability"). recordInputs/recordOutputs default to true, so the full system+user
-    // prompt and the full parsed response are what actually show up in a trace, not a summary.
-    telemetry: { isEnabled: true, functionId: "generate-activity" },
-  });
+  const modelId = opts?.model ?? CODEGEN_MODEL;
+  const { object } = await traceGeneration(
+    { name: "generate-activity", model: modelId, input: { system: SYSTEM_PROMPT, prompt: userContent } },
+    () =>
+      generateObject({
+        model: codegenModel(modelId),
+        schema: ActivityGenerationSchema,
+        system: SYSTEM_PROMPT,
+        prompt: userContent,
+        // 120s reflects real measured latency from testing, not a guess — this model's
+        // response time for a typically-verbose (~20k+ token) activity varies from ~60s to
+        // well over 90s. /api/generate's maxDuration is sized to fit 3 attempts at this
+        // timeout with margin, or the route itself gets killed by the platform before a
+        // legitimately-slow-but-working call finishes. See CLAUDE.md "Reliability" for the
+        // full account of what was tried and why.
+        abortSignal: AbortSignal.timeout(120_000),
+        repairText: stripMarkdownFence,
+      }),
+  );
 
   return object;
 }
