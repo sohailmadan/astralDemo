@@ -112,13 +112,15 @@ Fix only what's broken and return the corrected activity in full.`
         schema: ActivityGenerationSchema,
         system: SYSTEM_PROMPT,
         prompt: userContent,
-        // 120s reflects real measured latency from testing, not a guess — this model's
-        // response time for a typically-verbose (~20k+ token) activity varies from ~60s to
-        // well over 90s. /api/generate's maxDuration is sized to fit 3 attempts at this
-        // timeout with margin, or the route itself gets killed by the platform before a
-        // legitimately-slow-but-working call finishes. See CLAUDE.md "Reliability" for the
-        // full account of what was tried and why.
-        abortSignal: AbortSignal.timeout(120_000),
+        // Widened from 120s after repeated real-world timeouts at that limit (several
+        // attempts genuinely still working, just slow on this free tier) — 10 minutes gives
+        // room to actually see a call complete rather than keep cutting off in-progress work.
+        // Real cost of this: 3 attempts at a full 10 minutes each is 30 minutes worst case,
+        // which exceeds any realistic Vercel serverless function limit (even Pro + Fluid
+        // Compute tops out far below that) — this value is appropriate for local testing
+        // (`bun run start`, no wall-clock kill) while verifying the pipeline can actually
+        // succeed at all; it is not the production-ready number. See CLAUDE.md "Reliability."
+        abortSignal: AbortSignal.timeout(600_000),
         repairText: stripMarkdownFence,
       }),
   );

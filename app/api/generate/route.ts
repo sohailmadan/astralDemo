@@ -6,12 +6,13 @@ import { MAX_REPAIR_ATTEMPTS } from "@/lib/generation-constants";
 import { compileActivity, type CompileError } from "@/lib/sandbox/compile";
 import { createServiceClient } from "@/lib/supabase/service";
 
-// Sized against generateActivity.ts's measured 120s per-call timeout: 1 initial attempt + up
-// to MAX_REPAIR_ATTEMPTS more (3 total) x 120s = 360s, plus compile overhead, with margin.
-// Vercel Hobby caps functions at 60s regardless of this value — this pipeline needs a Pro plan
-// (or Fluid Compute) to actually run in production; worth knowing at deploy time, not
-// discovering it there. Named explicitly in the README as a real constraint, not glossed over.
-export const maxDuration = 500;
+// Vercel's actual serverless ceiling (even Pro + Fluid Compute) sits well under what 3
+// attempts at generateActivity.ts's current 10-minute-per-call timeout could take (worst case
+// 30 minutes) — this value is capped at what the platform will actually allow rather than
+// matched to that worst case, which is unreachable in a real deployment regardless of this
+// setting. Fine for local testing (`bun run start`, no such kill), a real constraint at
+// deploy time — named explicitly in the README, not glossed over.
+export const maxDuration = 800;
 
 const MAX_PROMPT_LENGTH = 500;
 
