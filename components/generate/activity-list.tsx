@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 import { GenerationProgress } from "@/components/generate/generation-progress";
+import { NavProgressBar } from "@/components/generate/nav-progress-bar";
 import { StalledNotice } from "@/components/generate/stalled-notice";
 import { StatusBadge } from "@/components/generate/status-badge";
 import { createClient } from "@/lib/supabase/client";
@@ -101,6 +102,7 @@ function ActivityRow({ activity }: { activity: Activity }) {
           href={`/activities/${activity.id}`}
           className={`${baseClasses} block hover:border-primary/40 hover:bg-accent/40`}
         >
+          <NavProgressBar />
           {content}
         </Link>
       </li>

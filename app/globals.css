@@ -40,3 +40,13 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Used by NavProgressBar's top loading bar (see components/generate/nav-progress-bar.tsx). */
+@keyframes nav-progress {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(300%);
+  }
+}
