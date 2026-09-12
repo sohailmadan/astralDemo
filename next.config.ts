@@ -8,6 +8,11 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: path.join(__dirname),
   },
+  // esbuild ships a native binary package (@esbuild/darwin-arm64 etc.) with non-JS files
+  // (README.md) that Turbopack chokes on trying to bundle for the server. It's server-only,
+  // Node-native code anyway — tell Next to require() it directly at runtime instead of
+  // bundling it, which is what this option exists for.
+  serverExternalPackages: ["esbuild"],
   // Baseline security headers on the host app itself — separate from, and in addition to, the
   // sandboxed activity iframe's own CSP (see CLAUDE.md "Security considerations"). Cheap to
   // add, easy to forget.
