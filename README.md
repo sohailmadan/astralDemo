@@ -1,109 +1,197 @@
-<a href="https://demo-nextjs-with-supabase.vercel.app/">
-  <img alt="Next.js and Supabase Starter Kit - the fastest way to build apps with Next.js and Supabase" src="https://demo-nextjs-with-supabase.vercel.app/opengraph-image.png">
-  <h1 align="center">Next.js and Supabase Starter Kit</h1>
-</a>
+# Generative Interactive Learning
 
-<p align="center">
- The fastest way to build apps with Next.js and Supabase
-</p>
+A two-page app: describe what you want to learn, get back a real, generated, interactive
+piece of software to learn it with — not an article, not a static quiz — alongside an AI
+tutor that can see and act on the activity's live state.
 
-<p align="center">
-  <a href="#features"><strong>Features</strong></a> ·
-  <a href="#demo"><strong>Demo</strong></a> ·
-  <a href="#deploy-to-vercel"><strong>Deploy to Vercel</strong></a> ·
-  <a href="#clone-and-run-locally"><strong>Clone and run locally</strong></a> ·
-  <a href="#feedback-and-issues"><strong>Feedback and issues</strong></a>
-  <a href="#more-supabase-examples"><strong>More Examples</strong></a>
-</p>
-<br/>
+Built for a take-home challenge. See `CLAUDE.md` for the full, detailed architecture record
+kept up to date as the project progressed — this README is the required overview; `CLAUDE.md`
+is the "why," including live findings from testing against real free-tier models.
 
-## Features
+**Status**: Milestones 1 and 2 (app skeleton, real generation pipeline) are complete and
+verified against a live deployment. Milestone 3 (the AI tutor) is in progress — see
+"What's not built yet" below.
 
-- Works across the entire [Next.js](https://nextjs.org) stack
-  - App Router
-  - Pages Router
-  - Proxy
-  - Client
-  - Server
-  - It just works!
-- supabase-ssr. A package to configure Supabase Auth to use cookies
-- Password-based authentication block installed via the [Supabase UI Library](https://supabase.com/ui/docs/nextjs/password-based-auth)
-- Styling with [Tailwind CSS](https://tailwindcss.com)
-- Components with [shadcn/ui](https://ui.shadcn.com/)
-- Optional deployment with [Supabase Vercel Integration and Vercel deploy](#deploy-your-own)
-  - Environment variables automatically assigned to Vercel project
+## Architecture
 
-## Demo
+```
+app/
+  page.tsx                     Generate page (/)
+  activities/[id]/page.tsx     Learn page
+  api/generate/route.ts        generate -> validate -> repair pipeline
+lib/
+  ai/
+    openrouter.ts              single provider access point (model swappable here only)
+    generateActivity.ts        the generation call: schema, system prompt, repair support
+  sandbox/
+    compile.ts                 esbuild + Tailwind JIT compile/validate step
+    iframe-html.ts             assembles the sandboxed iframe's srcDoc
+  supabase/
+    client.ts / server.ts      anon-key clients (browser / server-rendered pages)
+    service.ts                 service-role client — server routes only, bypasses RLS
+    queries.ts                 typed reads
+  generation-constants.ts      retry/timeout constants shared by the pipeline and the UI
+  use-is-stale.ts              detects a generating row stuck past its own worst-case time
+components/
+  generate/                    Generate page: prompt form, activity list, progress UI
+  activity/                    Learn page: sandboxed iframe host, error boundary
+  ui/                          shadcn primitives (button, input, card, ...)
+sdk/
+  activity-sdk.ts              the useTutorBridge() hook, bundled into every generated activity
+  types.ts                     the fixed contract's types + the host<->activity message protocol
+evals/
+  generation.eval.yaml         promptfoo suite — run before any prompt/contract change
+  run-generation.ts            exec provider calling the real pipeline (not a mock)
+supabase/migrations/           schema, RLS policies, Realtime publication
+instrumentation.ts             Langfuse tracing registration
+```
 
-You can view a fully working demo at [demo-nextjs-with-supabase.vercel.app](https://demo-nextjs-with-supabase.vercel.app/).
+Everything reachable from the browser is either a Server Component doing a plain read, or a
+Client Component talking to our own `/api/*` routes — nothing in the browser ever holds a
+service-role key or calls OpenRouter/Supabase's privileged APIs directly.
 
-## Deploy to Vercel
+## How generation works
 
-Vercel deployment will guide you through creating a Supabase account and project.
+`POST /api/generate` does the fast part synchronously — insert a row (`status: generating`),
+return immediately — then keeps working via Next's `after()`, which is what lets a single
+request return in milliseconds while the actual generation (which can take minutes on free
+models) continues server-side without blocking the client.
 
-After installation of the Supabase integration, all relevant environment variables will be assigned to the project so the deployment is fully functioning.
+The pipeline (`runGenerationPipeline` in `app/api/generate/route.ts`) is a bounded loop, up to
+3 attempts total:
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fvercel%2Fnext.js%2Ftree%2Fcanary%2Fexamples%2Fwith-supabase&project-name=nextjs-with-supabase&repository-name=nextjs-with-supabase&demo-title=nextjs-with-supabase&demo-description=This+starter+configures+Supabase+Auth+to+use+cookies%2C+making+the+user%27s+session+available+throughout+the+entire+Next.js+app+-+Client+Components%2C+Server+Components%2C+Route+Handlers%2C+Server+Actions+and+Middleware.&demo-url=https%3A%2F%2Fdemo-nextjs-with-supabase.vercel.app%2F&external-id=https%3A%2F%2Fgithub.com%2Fvercel%2Fnext.js%2Ftree%2Fcanary%2Fexamples%2Fwith-supabase&demo-image=https%3A%2F%2Fdemo-nextjs-with-supabase.vercel.app%2Fopengraph-image.png)
+1. **Generate** — `generateActivityCode()` calls the AI SDK's `generateObject` (not
+   `generateText`) against a Zod schema returning `{ title, code, actions }`. The system
+   prompt encodes the full fixed contract: the generated component may only import `react` and
+   `./activity-sdk`; must call `useTutorBridge()` and use `publishState`/`emitEvent`/
+   `registerAction`; must use concrete Tailwind palette classes (never our app's semantic
+   aliases, which need CSS variables the sandbox doesn't have); and must include a real
+   submit/check action, concrete feedback, and a visible "ask for help" affordance — these are
+   non-negotiable UX rules, not left to chance per-prompt.
+2. **Validate** — `compileActivity()` bundles the generated code with esbuild (the same file
+   temp-written alongside the real SDK source, so `./activity-sdk` resolves correctly) and
+   separately JIT-compiles a scoped Tailwind stylesheet via Tailwind's `content: [{ raw }]`
+   API, containing only the classes the generated code actually uses.
+3. **Repair, if needed** — a compile failure feeds the exact structured error (file/line/
+   column/message) back into a second `generateActivityCode` call with an instruction to fix
+   only what's broken, not start over. Up to 2 repair attempts.
+4. **Store or fail honestly** — success stores the validated compiled JS/CSS directly (so the
+   Learn page never recompiles what's already been validated); exhausting all 3 attempts
+   writes `status: failed` with the real last error — never a disguised success.
 
-The above will also clone the Starter kit to your GitHub, you can clone that locally and develop locally.
+Model choice took three rounds of live testing against OpenRouter's actual free tier (the
+originally planned models were discontinued from free between planning and implementation).
+Full account, including two hung/rate-limited candidates rejected and why the current model
+(`cohere/north-mini-code:free`) was kept despite variable latency, is in `CLAUDE.md`
+"Reliability."
 
-If you wish to just develop locally and not deploy to Vercel, [follow the steps below](#clone-and-run-locally).
+## How generated code is validated and executed
 
-## Clone and run locally
+- **Validated** server-side by esbuild, which transforms/bundles syntax but never executes the
+  input — running it there carries none of the risk `eval()` on untrusted code would.
+- **Executed** exclusively client-side, inside a sandboxed iframe: `srcDoc` (all JS/CSS inlined,
+  no external resource references at all), `sandbox="allow-scripts"` with **no**
+  `allow-same-origin` (this is what actually isolates it from the host's cookies/storage/DOM),
+  and a CSP baked into that same document (`default-src 'none'`, inline script/style only) —
+  this is what prevents any data-exfiltration attempt from generated code, not just what limits
+  imports at compile time.
+- **Hang protection**: the host sets a handshake timeout — if the iframe doesn't post a
+  `READY` message within 5 seconds, it's treated as hung and a failure state is shown rather
+  than leaving the tab stuck. A true infinite loop can only be caught by a wall-clock watchdog
+  from *outside* the frame, since the frame's own thread would be blocked — this is the
+  practical answer to "what happens if generated code enters an infinite loop," with the known
+  limitation that it can't recover a hang *mid-interaction* after the activity already loaded.
+- **Pre-flight validation before exposure**: compiling is not the same as working — a
+  component can compile fine and still throw on mount. The pre-flight render check inside the
+  same sandboxed iframe catches this before status ever becomes `ready`.
 
-1. You'll first need a Supabase project which can be made [via the Supabase dashboard](https://database.new)
+## What's not built yet
 
-2. Create a Next.js app using the Supabase Starter template npx command
+Milestone 3, the tutor↔activity bridge, is the remaining major piece:
 
-   ```bash
-   npx create-next-app --example with-supabase with-supabase-app
-   ```
+- `POST /api/tutor` — context assembly (activity + `last_state` + a plain-language progress
+  summary aggregated from a durable `activity_events` log + bounded recent conversation),
+  tool-calling constrained to the activity's registered `actions`.
+- The live `postMessage` bridge (`STATE_SNAPSHOT`/`STATE_DELTA` out, `ACTION_CALL`/
+  `ACTION_RESULT` in) — the SDK contract and protocol types (`sdk/types.ts`) are already built
+  and ready for this; the persistence endpoint and the tutor itself are not yet wired.
 
-   ```bash
-   yarn create next-app --example with-supabase with-supabase-app
-   ```
+Full design (already decided, not yet implemented) is in `CLAUDE.md` "AI tutor <-> activity
+interface."
 
-   ```bash
-   pnpm create next-app --example with-supabase with-supabase-app
-   ```
+## Observability
 
-3. Use `cd` to change into the app's directory
+Langfuse, wired through the AI SDK's built-in OpenTelemetry hook (`instrumentation.ts` +
+`telemetry: { isEnabled: true }` on the generation call) — not a bespoke tracer. A trace
+captures the full prompt, the full parsed response, model, latency, and token usage for every
+generation attempt.
 
-   ```bash
-   cd with-supabase-app
-   ```
+To see traces: set `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, and `LANGFUSE_BASE_URL` (free
+tier at [cloud.langfuse.com](https://cloud.langfuse.com), no card required) in `.env.local`.
+With no keys set, tracing is skipped entirely rather than failing requests.
 
-4. Rename `.env.example` to `.env.local` and update the following:
+## Tradeoffs made
 
-  ```env
-  NEXT_PUBLIC_SUPABASE_URL=[INSERT SUPABASE PROJECT URL]
-  NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=[INSERT SUPABASE PROJECT API PUBLISHABLE OR ANON KEY]
-  ```
-  > [!NOTE]
-  > This example uses `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, which refers to Supabase's new **publishable** key format.
-  > Both legacy **anon** keys and new **publishable** keys can be used with this variable name during the transition period. Supabase's dashboard may show `NEXT_PUBLIC_SUPABASE_ANON_KEY`; its value can be used in this example.
-  > See the [full announcement](https://github.com/orgs/supabase/discussions/29260) for more information.
+- **`after()`, not a durable queue.** Generation work continues after the HTTP response via
+  Next's `after()`. This is not a queue — if the function is killed mid-callback (a crash, a
+  redeploy), that generation is simply lost, with no retry and no record. Acceptable at this
+  scale (one generation, low volume); the wrong call under real production traffic, where a
+  proper queue/worker (SQS, Vercel Workflows, Inngest) would be correct. A UI-level mitigation
+  exists (`useIsStale` + a retry affordance) but the underlying row is never automatically
+  recovered.
+- **No auth**, per the brief's explicit instruction — RLS is deny-by-default instead: only
+  `activities` has a public policy (`SELECT` only), `tutor_messages`/`activity_events` have
+  none at all, and all writes go through server routes using the service-role key.
+- **Store the compiled bundle, not just source.** `activities.compiled_js`/`compiled_css`
+  hold the exact validated output, so the Learn page serves what was already checked instead
+  of trusting a second, redundant compile to produce the same thing.
+- **A static worst-case time estimate, not a live percentage.** The Generate/Learn pages show
+  "attempt X of 3" (an exact fact) and "can take up to 6 minutes" (derived from the pipeline's
+  own `MAX_GENERATION_ATTEMPTS × timeout` constants) rather than a ticking per-second counter —
+  an earlier version had one, and it read as broken the moment a real run (326s) exceeded the
+  per-attempt estimate it was built around.
+- **`maxDuration = 500`** on `/api/generate`, sized for 3 attempts at the model's measured
+  ~120s worst case. Vercel's Hobby plan caps functions at 60s regardless of this value — this
+  pipeline needs a Pro plan (or Fluid Compute) to actually run in production.
 
-  Both `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` can be found in [your Supabase project's API settings](https://supabase.com/dashboard/project/_?showConnect=true)
+## What I'd improve with more time
 
-5. You can now run the Next.js local development server:
+- Finish Milestone 3 (the tutor) and Milestone 4 (a real visual/interaction polish pass on
+  generated activities — "Taste" is explicitly graded and hasn't had a dedicated pass yet).
+- Replace `after()` with a real queue/worker if this needed to survive production traffic —
+  named above as a known, accepted limitation at this scale, not an oversight.
+- A background sweep to actually flip stuck `generating` rows to `failed` server-side (the
+  current `useIsStale` fix is a client-side UI affordance, not a server-side guarantee).
+- Broaden the eval suite's prompt coverage and add unit tests for the tutor's context-assembly
+  logic once Milestone 3 lands.
+- Fish Audio voice on the tutor chat (explicit stretch goal, intentionally deferred behind the
+  text-first tutor per the brief's stated minimum bar).
 
-   ```bash
-   npm run dev
-   ```
+## How to run locally
 
-   The starter kit should now be running on [localhost:3000](http://localhost:3000/).
+Requires [Bun](https://bun.sh), a Supabase project, and an OpenRouter API key.
 
-6. This template comes with the default shadcn/ui style initialized. If you instead want other ui.shadcn styles, delete `components.json` and [re-install shadcn/ui](https://ui.shadcn.com/docs/installation/next)
+```bash
+bun install
+cp .env.example .env.local   # fill in Supabase + OpenRouter (+ optional Langfuse) values
+```
 
-> Check out [the docs for Local Development](https://supabase.com/docs/guides/getting-started/local-development) to also run Supabase locally.
+Apply the schema (three tables, RLS policies, Realtime publication — see
+`supabase/migrations/`) via the Supabase CLI:
 
-## Feedback and issues
+```bash
+supabase link --project-ref <your-project-ref>
+supabase db push
+```
 
-Please file feedback and issues over on the [Supabase GitHub org](https://github.com/supabase/supabase/issues/new/choose).
+```bash
+bun run dev          # http://localhost:3000
+bun run test          # unit tests (compile pipeline, iframe HTML builder)
+bun run lint
+bun run eval:generation   # promptfoo suite against the real pipeline — slow, real LLM calls
+```
 
-## More Supabase examples
-
-- [Next.js Subscription Payments Starter](https://github.com/vercel/nextjs-subscription-payments)
-- [Cookie-based Auth and the Next.js 13 App Router (free course)](https://youtube.com/playlist?list=PL5S4mPUpp4OtMhpnp93EFSo42iQ40XjbF)
-- [Supabase Auth and the Next.js App Router](https://github.com/supabase/supabase/tree/master/examples/auth/nextjs)
+`.env.local` variables (see `.env.example` for the full list): `NEXT_PUBLIC_SUPABASE_URL`,
+`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (server-only — never
+prefix with `NEXT_PUBLIC_`), `OPENROUTER_API_KEY`, and optionally `LANGFUSE_PUBLIC_KEY`/
+`LANGFUSE_SECRET_KEY`/`LANGFUSE_BASE_URL`.
