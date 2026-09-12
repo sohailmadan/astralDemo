@@ -114,6 +114,11 @@ Fix only what's broken and return the corrected activity in full.`
     // finishes. See CLAUDE.md "Reliability" for the full account of what was tried and why.
     abortSignal: AbortSignal.timeout(120_000),
     repairText: stripMarkdownFence,
+    // Captured in Langfuse via instrumentation.ts's LangfuseSpanProcessor — prompt, response,
+    // model, latency, and token usage, with zero bespoke tracing code (see CLAUDE.md
+    // "Observability"). recordInputs/recordOutputs default to true, so the full system+user
+    // prompt and the full parsed response are what actually show up in a trace, not a summary.
+    telemetry: { isEnabled: true, functionId: "generate-activity" },
   });
 
   return object;
