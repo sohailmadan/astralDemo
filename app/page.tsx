@@ -23,11 +23,13 @@ export default async function GeneratePage() {
 
       <PromptForm />
 
-      <section className="flex flex-col gap-3">
+      <section className="flex min-h-0 flex-1 flex-col gap-3">
         <h2 className="text-sm font-medium text-muted-foreground">
           Your activities
         </h2>
-        <ActivityList initialActivities={activities} />
+        <div className="max-h-[60vh] overflow-y-auto rounded-lg">
+          <ActivityList initialActivities={activities} />
+        </div>
       </section>
     </main>
   );
