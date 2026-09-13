@@ -85,6 +85,13 @@ CONTRACT — the generated code must follow this exactly:
      usefully be done once, disable it once it no longer applies (e.g. \`disabled\`, a muted
      color) and say so in its own label, rather than leaving a dead or re-clickable button with
      no visual difference from one that still does something.
+   - When a step transforms a value shown on screen, show what happened to EVERY part it
+     affected, not just whichever part changed most visibly. E.g. dividing an equation by a
+     number changes both a coefficient (which may just disappear, e.g. "2x" -> "x") and a
+     constant (an obvious arithmetic change, e.g. "8" -> "4") — if only the obvious side is
+     shown, the less-obvious change reads as if nothing happened there, even though the same
+     operation applied to it. Show the actual before/after operation explicitly (e.g.
+     "2x ÷ 2 = 8 ÷ 2 → x = 4"), not just the collapsed end state.
 
 6. Keep it focused: one activity, one concept, doing it well. Do not try to cover everything
    related to the topic.
