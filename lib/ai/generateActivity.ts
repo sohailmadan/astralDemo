@@ -2,7 +2,7 @@ import { generateObject } from "ai";
 import { z } from "zod";
 
 import { traceGeneration } from "../trace";
-import { CODEGEN_MODEL, codegenModel } from "./openrouter";
+import { CODEGEN_MODEL, codegenModel, effectiveModelId } from "./openrouter";
 
 export const ActivityGenerationSchema = z.object({
   title: z
@@ -255,7 +255,7 @@ Fix only what's broken and return the corrected activity in full.`
   const { object } = await traceGeneration(
     {
       name: "generate-activity",
-      model: modelId,
+      model: effectiveModelId(modelId),
       input: { system: SYSTEM_PROMPT, prompt: userContent },
     },
     () =>

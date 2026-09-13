@@ -1,3 +1,4 @@
+import { createOpenAI } from "@ai-sdk/openai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 
 /**
@@ -11,6 +12,29 @@ import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 const openrouter = createOpenRouter({
   apiKey: process.env.OPENROUTER_API_KEY,
 });
+
+// Local dev-only escape hatch, not a change to the production model strategy — the brief's
+// runtime LLM constraint (free OpenRouter models only) is about what's actually deployed, and
+// that's unaffected: this is gated behind USE_LOCAL_OLLAMA, off by default, and never touched
+// by anything except a local `bun run start`/`dev` session that opts in. Exists purely because
+// OpenRouter's daily free-tier quota got fully exhausted mid-session (repeatedly, across both
+// codegen and tutor calls sharing one cap) and blocked all further local verification — Ollama
+// running locally has no such limit and costs nothing, since it never leaves the machine.
+// Ollama exposes an OpenAI-compatible API, so this reuses the official @ai-sdk/openai provider
+// pointed at it rather than a bespoke client.
+//
+// Model size matters here: this machine has 16GB total RAM. gpt-oss:20b (a 13GB file,
+// originally pulled and tested) is too large — running it leaves almost no headroom for the OS
+// and everything else, risking making the whole machine unresponsive. llama3.2:3b (~2GB,
+// tool-calling capable) is the actual default used — pick something similarly sized for your
+// own machine's real available RAM, not just whatever model happens to be biggest/best.
+const ollama = createOpenAI({
+  baseURL: "http://localhost:11434/v1",
+  apiKey: "ollama", // required by the client shape; ignored by Ollama itself
+});
+
+const USE_LOCAL_OLLAMA = process.env.USE_LOCAL_OLLAMA === "true";
+const OLLAMA_MODEL = process.env.OLLAMA_MODEL ?? "llama3.2:3b";
 
 // Verified live on OpenRouter's /api/v1/models as of this writing — both originally planned
 // models (openai/gpt-oss-120b:free, openai/gpt-oss-20b:free) were discontinued from the free
@@ -60,9 +84,21 @@ export const TUTOR_MODEL = "liquid/lfm-2.5-2.6b:free";
 export const TUTOR_FALLBACK_MODEL = "nvidia/nemotron-3-super-120b-a12b:free";
 
 export function codegenModel(modelId: string = CODEGEN_MODEL) {
+  if (USE_LOCAL_OLLAMA) return ollama(OLLAMA_MODEL);
   return openrouter(modelId);
 }
 
 export function tutorModel(modelId: string = TUTOR_MODEL) {
+  if (USE_LOCAL_OLLAMA) return ollama(OLLAMA_MODEL);
   return openrouter(modelId);
+}
+
+/**
+ * What actually ran, for Langfuse traces — without this, a trace would keep labeling every
+ * generation "cohere/north-mini-code:free" even while USE_LOCAL_OLLAMA silently redirected the
+ * real call to a completely different local model, which would be a misleading observability
+ * record of what happened.
+ */
+export function effectiveModelId(requestedModelId: string): string {
+  return USE_LOCAL_OLLAMA ? `ollama:${OLLAMA_MODEL}` : requestedModelId;
 }

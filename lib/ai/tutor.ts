@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import { traceGeneration } from "../trace";
 import type { Activity, ActivityActionArg, ActivityEvent, TutorMessage } from "../types";
-import { TUTOR_MODEL, tutorModel } from "./openrouter";
+import { effectiveModelId, TUTOR_MODEL, tutorModel } from "./openrouter";
 
 // Same shape as the generation repair loop's bound (see CLAUDE.md "AI tutor <-> activity
 // interface" / "Security considerations") — a long-running session's history is capped so a
@@ -150,7 +150,7 @@ export async function getTutorReply(params: {
   ];
 
   const result = await traceGeneration(
-    { name: "tutor-turn", model: TUTOR_MODEL, input: { system, messages } },
+    { name: "tutor-turn", model: effectiveModelId(TUTOR_MODEL), input: { system, messages } },
     () =>
       generateText({
         model: tutorModel(),
