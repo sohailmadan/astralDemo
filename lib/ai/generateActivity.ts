@@ -129,11 +129,14 @@ CONTRACT — the generated code must follow this exactly:
 1. Export a single default function component taking no required props:
    \`export default function Activity() { ... }\`
 
-2. The ONLY imports allowed are:
-   - "react" (hooks: useState, useEffect, useRef, etc.)
-   - "./activity-sdk" — provides useTutorBridge()
-   No other npm packages. No CSS imports. Everything else must be built from plain React +
-   Tailwind utility classes.
+2. You MUST include BOTH of these import statements at the top of the file, always, even if
+   it looks obvious from context that they're needed — they are not automatically available:
+   \`import { useState, useEffect /* + whatever else you use */ } from "react";\`
+   \`import { useTutorBridge } from "./activity-sdk";\`
+   These are also the ONLY imports allowed — no other npm packages, no CSS imports. Everything
+   else must be built from plain React + Tailwind utility classes. Omitting either required
+   import is a hard failure: the activity will build without error but crash the instant it
+   runs, showing the learner nothing at all.
 
 3. Call \`const bridge = useTutorBridge()\` and use it to stay connected to the tutor:
    - \`bridge.publishState(state)\` — call this whenever the activity's meaningful state

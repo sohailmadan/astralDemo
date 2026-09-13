@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { compileActivity } from "./compile";
+import { compileActivity, validateRequiredImports } from "./compile";
 
 const VALID_ACTIVITY = `
   import { useState } from "react";
@@ -55,6 +55,9 @@ describe("compileActivity", () => {
 
   it("reports a structured error for invalid syntax, without leaking the temp file path", async () => {
     const result = await compileActivity(`
+      import { useState } from "react";
+      import { useTutorBridge } from "./activity-sdk";
+
       export default function Activity() {
         return <div>{unclosed
       }
@@ -79,5 +82,49 @@ describe("compileActivity", () => {
     `);
 
     expect(result.ok).toBe(false);
+  });
+
+  // Regression test: found directly in production — a generated activity used
+  // useState/useEffect/useTutorBridge throughout with NO import statement for either "react"
+  // or "./activity-sdk" anywhere in the file. esbuild bundles this "successfully" (a bare,
+  // undeclared identifier isn't a module-resolution failure or a syntax error), and it only
+  // throws ReferenceError once the browser actually executes it — the activity renders as
+  // nothing at all, with no visible error. This must be caught here, before esbuild ever runs.
+  it("fails fast when the required react/activity-sdk imports are missing entirely", async () => {
+    const result = await compileActivity(`
+      export default function Activity() {
+        const bridge = useTutorBridge();
+        const [count, setCount] = useState(0);
+        return <div>{count}</div>;
+      }
+    `);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors.some((e) => e.message.includes("react"))).toBe(true);
+      expect(result.errors.some((e) => e.message.includes("activity-sdk"))).toBe(true);
+    }
+  });
+});
+
+describe("validateRequiredImports", () => {
+  it("returns no errors when both required imports are present", () => {
+    const code = `
+      import { useState } from "react";
+      import { useTutorBridge } from "./activity-sdk";
+    `;
+    expect(validateRequiredImports(code)).toEqual([]);
+  });
+
+  it("reports only the react import as missing when activity-sdk is present", () => {
+    const code = `import { useTutorBridge } from "./activity-sdk";`;
+    const errors = validateRequiredImports(code);
+    expect(errors.length).toBe(1);
+    expect(errors[0].message).toContain("react");
+  });
+
+  it("reports both as missing when neither import is present", () => {
+    const errors = validateRequiredImports(`export default function Activity() { return null; }`);
+    expect(errors.length).toBe(2);
   });
 });

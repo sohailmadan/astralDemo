@@ -39,6 +39,37 @@ export type CompileResult =
 const SDK_DIR = path.join(process.cwd(), "sdk");
 const PROJECT_NODE_MODULES = path.join(process.cwd(), "node_modules");
 
+// Found directly in production: a generated activity that used useState/useEffect/
+// useTutorBridge throughout, with NO import statement for either "react" or
+// "./activity-sdk" anywhere in the file. esbuild's bundler has no way to catch this — a bare,
+// undeclared identifier like useState isn't a module-resolution failure or a syntax error, so
+// it bundles "successfully" and only throws (ReferenceError) the moment the browser actually
+// executes it, inside the sandboxed iframe, with no visible error to the learner: the whole
+// component tree fails to mount and the activity renders as nothing at all. TypeScript's own
+// type checker would catch this; we deliberately don't run one (esbuild's fast transpile only)
+// for compile speed, so this cheap, deterministic presence check is the substitute — reusing
+// the same repair-loop machinery as any other compile error, not a new failure path.
+const REQUIRED_IMPORTS: { pattern: RegExp; message: string }[] = [
+  {
+    pattern: /from\s+['"]react['"]/,
+    message:
+      'Missing a required `import ... from "react"` statement — useState/useEffect/etc. must be explicitly imported, they are not globally available.',
+  },
+  {
+    pattern: /from\s+['"]\.\/activity-sdk['"]/,
+    message:
+      'Missing the required `import { useTutorBridge } from "./activity-sdk"` statement.',
+  },
+];
+
+/** Exported for testing. */
+export function validateRequiredImports(code: string): CompileError[] {
+  return REQUIRED_IMPORTS.filter(({ pattern }) => !pattern.test(code)).map(({ message }) => ({
+    message,
+    file: "Activity.tsx",
+  }));
+}
+
 const ENTRY_SOURCE = `import { createRoot } from "react-dom/client";
 import Activity from "./Activity";
 
@@ -63,6 +94,11 @@ reportHeight();
 `;
 
 export async function compileActivity(generatedTsx: string): Promise<CompileResult> {
+  const importErrors = validateRequiredImports(generatedTsx);
+  if (importErrors.length > 0) {
+    return { ok: false, errors: importErrors };
+  }
+
   const dir = await mkdtemp(path.join(tmpdir(), "astral-activity-"));
 
   try {
