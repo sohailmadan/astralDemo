@@ -60,6 +60,36 @@ export async function traceGeneration<T extends { usage?: unknown }>(
   }
 }
 
+/**
+ * Traces a non-LLM step (e.g. the esbuild/Tailwind compile step) as a Langfuse event — the
+ * brief's Observability requirement asks specifically for "retries or repairs" and "errors" to
+ * be inspectable, and a repair-loop attempt's compile result is exactly that, but it happens
+ * entirely outside any AI SDK call, so traceGeneration above never sees it. Without this, a
+ * genuine repair-loop failure (the model producing consistently bad code across all 3
+ * attempts) was invisible in Langfuse — traceable only via server logs and the DB's
+ * attempt_history, never alongside the generation call it followed.
+ */
+export async function traceEvent(params: {
+  name: string;
+  input?: unknown;
+  output?: unknown;
+  level?: "DEFAULT" | "ERROR";
+  statusMessage?: string;
+}): Promise<void> {
+  const langfuse = getClient();
+  if (!langfuse) return;
+
+  const trace = langfuse.trace({ name: params.name });
+  trace.event({
+    name: params.name,
+    input: params.input,
+    output: params.output,
+    level: params.level,
+    statusMessage: params.statusMessage,
+  });
+  await langfuse.flushAsync();
+}
+
 function extractUsage(usage: unknown): { input?: number; output?: number; total?: number } | undefined {
   if (!usage || typeof usage !== "object") return undefined;
   const u = usage as Record<string, unknown>;

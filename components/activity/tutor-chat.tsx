@@ -31,6 +31,19 @@ export const TutorChat = forwardRef<
   const [messages, setMessages] = useState<ChatMessage[]>(() => initialMessages.map(toChatMessage));
   const [input, setInput] = useState("");
   const [isSending, setIsSending] = useState(false);
+  const [isClearing, setIsClearing] = useState(false);
+
+  async function handleClear() {
+    setIsClearing(true);
+    try {
+      const res = await fetch(`/api/activities/${activityId}/tutor-messages`, { method: "DELETE" });
+      if (res.ok) {
+        setMessages([]);
+      }
+    } finally {
+      setIsClearing(false);
+    }
+  }
 
   async function sendMessage(text: string) {
     if (!text.trim() || isSending) return;
@@ -94,7 +107,18 @@ export const TutorChat = forwardRef<
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col gap-3 rounded-lg border border-border bg-card p-4">
-      <h2 className="text-sm font-medium text-foreground">Tutor</h2>
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-medium text-foreground">Tutor</h2>
+        {messages.length > 0 && (
+          <button
+            onClick={handleClear}
+            disabled={isClearing}
+            className="text-xs text-muted-foreground underline-offset-2 hover:underline disabled:opacity-50"
+          >
+            Clear chat
+          </button>
+        )}
+      </div>
 
       <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
         {messages.length === 0 && (

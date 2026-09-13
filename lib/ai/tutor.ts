@@ -18,7 +18,11 @@ Rules:
 - If the learner got something wrong, ask them to walk through their thinking first ("what made you pick that?") rather than immediately giving the correct answer — Socratic, not answer-dispensing.
 - Keep responses short and concrete. This is a chat, not a lecture.
 - Only invoke an action when it's clearly the right thing to do right now, never just to seem responsive.
-- Never claim to know something the state or progress summary below doesn't actually show.`;
+- Never claim to know something the state or progress summary below doesn't actually show.
+- When asked for a hint or help, address ONLY the specific question/value in the current state
+  below — never mention other steps, later parts of the problem, or the final answer. A hint
+  that references something outside what's happening right now reads as confusing rather than
+  helpful, since the learner has no way to tell if it's relevant to what they're stuck on.`;
 
 /**
  * Turns the raw activity_events log into a short, cheap-to-compute plain-language summary —
@@ -26,6 +30,13 @@ Rules:
  * mechanism behind "the tutor knows how many hints were used" (see CLAUDE.md). Intentionally
  * generic: it counts whatever event types this activity actually emitted, it doesn't assume
  * quiz-shaped fields like "correct"/"attempts" exist.
+ *
+ * Where an event's payload DOES carry a boolean `correct` field (most activities'
+ * answer/digit-submission events do, even though the contract never requires it), the summary
+ * also reports the right/wrong split and — separately — the outcome of the single most recent
+ * occurrence, so the tutor can tell "3 attempts, 2 right" apart from "3 attempts, but the last
+ * one was wrong" (a learner going backwards after getting it right once looks identical to one
+ * who's simply slow without that last-outcome signal).
  */
 export function computeProgressSummary(events: ActivityEvent[]): string {
   if (events.length === 0) {
@@ -33,13 +44,32 @@ export function computeProgressSummary(events: ActivityEvent[]): string {
   }
 
   const counts = new Map<string, number>();
+  const correctCounts = new Map<string, { correct: number; incorrect: number }>();
+  const lastOutcome = new Map<string, boolean>();
+
   for (const event of events) {
     counts.set(event.type, (counts.get(event.type) ?? 0) + 1);
+
+    const payload = event.payload;
+    if (payload && typeof payload === "object" && "correct" in payload) {
+      const isCorrect = Boolean((payload as { correct: unknown }).correct);
+      const entry = correctCounts.get(event.type) ?? { correct: 0, incorrect: 0 };
+      if (isCorrect) entry.correct++;
+      else entry.incorrect++;
+      correctCounts.set(event.type, entry);
+      lastOutcome.set(event.type, isCorrect); // events are in ascending order, so this ends up as the latest
+    }
   }
 
-  const parts = Array.from(counts.entries()).map(
-    ([type, count]) => `${type.replace(/_/g, " ")}: ${count}`,
-  );
+  const parts = Array.from(counts.entries()).map(([type, count]) => {
+    const label = type.replace(/_/g, " ");
+    const outcome = correctCounts.get(type);
+    if (!outcome) return `${label}: ${count}`;
+
+    const last = lastOutcome.get(type);
+    const lastNote = last === undefined ? "" : `, most recent was ${last ? "correct" : "incorrect"}`;
+    return `${label}: ${count} (${outcome.correct} correct, ${outcome.incorrect} incorrect${lastNote})`;
+  });
 
   return `Progress so far — ${parts.join(", ")}.`;
 }

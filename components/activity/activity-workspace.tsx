@@ -49,7 +49,16 @@ export function ActivityWorkspace({
           <ActivityFrame ref={frameRef} activity={activity} onEvent={handleActivityEvent} />
         </ActivityErrorBoundary>
       </div>
-      <aside className="flex min-h-0 w-full flex-col lg:w-80 lg:shrink-0">
+      {/*
+        Bounded height is required, not cosmetic: TutorChat's own message list relies on
+        overflow-y-auto to scroll internally, but that never engages on a container that's free
+        to grow to fit its content — it would just keep growing and the whole page would scroll
+        past it instead. h-[70vh] gives it a real height on every breakpoint; lg:sticky keeps it
+        pinned in view alongside the activity iframe (which can be taller, e.g. up to 900px) on
+        desktop, matching main's py-8 (2rem top + bottom = 4rem) so it fills the exact remaining
+        viewport height without an extra scrollbar of its own.
+      */}
+      <aside className="flex h-[70vh] min-h-0 w-full flex-col lg:sticky lg:top-8 lg:h-[calc(100vh-4rem)] lg:w-80 lg:shrink-0">
         <TutorChat
           ref={tutorRef}
           activityId={activity.id}

@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { generateActivityCode } from "@/lib/ai/generateActivity";
 import { MAX_REPAIR_ATTEMPTS } from "@/lib/generation-constants";
 import { createServiceClient } from "@/lib/supabase/service";
+import { traceEvent } from "@/lib/trace";
 import type { AttemptRecord } from "@/lib/types";
 import { compileActivity, type CompileError } from "@/lib/validate/compile";
 
@@ -67,6 +68,11 @@ async function runGenerationPipeline(activityId: string, prompt: string) {
 
       if (compiled.ok) {
         attemptHistory.push({ attempt: attemptNumber, code: generation.code, error: null });
+        await traceEvent({
+          name: "compile-activity",
+          input: { activityId, attempt: attemptNumber, code: generation.code },
+          output: { ok: true, jsBytes: compiled.code.length, cssBytes: compiled.css.length },
+        });
         await supabase
           .from("activities")
           .update({
@@ -93,6 +99,16 @@ async function runGenerationPipeline(activityId: string, prompt: string) {
       console.error(
         `[generate] activity ${activityId} attempt ${attemptNumber}/${MAX_REPAIR_ATTEMPTS + 1} failed to compile:\n${lastFailure}\n--- generated code ---\n${generation.code}`,
       );
+      // The compile step happens entirely outside any AI SDK call, so traceGeneration (which
+      // only wraps the LLM call itself) never sees it — without this, a genuine repair-loop
+      // failure was invisible in Langfuse, traceable only via server logs and the DB.
+      await traceEvent({
+        name: "compile-activity",
+        input: { activityId, attempt: attemptNumber, code: generation.code },
+        output: { ok: false, errors: compiled.errors },
+        level: "ERROR",
+        statusMessage: lastFailure,
+      });
     } catch (err) {
       // A generation-call-level failure (timeout, malformed JSON the repair hook couldn't fix)
       // has no `code` to hand back as a prior attempt — next loop iteration retries fresh

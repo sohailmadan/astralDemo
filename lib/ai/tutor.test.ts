@@ -3,8 +3,8 @@ import { describe, expect, it } from "bun:test";
 import { buildActionInputSchema, computeProgressSummary } from "./tutor";
 import type { ActivityEvent } from "../types";
 
-function event(type: string): ActivityEvent {
-  return { id: "e1", activity_id: "a1", type, payload: null, created_at: new Date().toISOString() };
+function event(type: string, payload: unknown = null): ActivityEvent {
+  return { id: "e1", activity_id: "a1", type, payload, created_at: new Date().toISOString() };
 }
 
 describe("computeProgressSummary", () => {
@@ -34,6 +34,31 @@ describe("computeProgressSummary", () => {
     const summary = computeProgressSummary([event("point_moved"), event("point_moved"), event("challenge_reset")]);
     expect(summary).toContain("point moved: 2");
     expect(summary).toContain("challenge reset: 1");
+  });
+
+  it("reports a right/wrong split when an event's payload carries a boolean 'correct' field", () => {
+    const summary = computeProgressSummary([
+      event("digit_submitted", { correct: true }),
+      event("digit_submitted", { correct: false }),
+      event("digit_submitted", { correct: true }),
+    ]);
+    expect(summary).toContain("digit submitted: 3 (2 correct, 1 incorrect");
+  });
+
+  // This is the "backwards" signal directly: 3 attempts total could mean "getting there" or
+  // "regressed after getting it right once" — only the most recent outcome disambiguates them.
+  it("reports the most recent outcome separately from the overall count", () => {
+    const summary = computeProgressSummary([
+      event("digit_submitted", { correct: true }),
+      event("digit_submitted", { correct: false }),
+    ]);
+    expect(summary).toContain("most recent was incorrect");
+  });
+
+  it("does not fabricate a right/wrong split for an event with no 'correct' field", () => {
+    const summary = computeProgressSummary([event("point_moved", { x: 1, y: 2 })]);
+    expect(summary).toContain("point moved: 1");
+    expect(summary).not.toContain("correct");
   });
 });
 
