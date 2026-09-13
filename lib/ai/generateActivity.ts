@@ -162,10 +162,23 @@ CONTRACT — the generated code must follow this exactly:
      (e.g. "answer_submitted", "hint_requested", "point_moved", "step_completed"). Emit an
      event for every meaningful learner action, not just some of them — this is how the tutor
      knows what happened.
-   - \`bridge.registerAction(name, handler)\` — register every action you listed in the
-     \`actions\` field of your response, so the tutor can actually do something inside the
-     activity (e.g. highlight a step, change a value, reset with new numbers), not just talk
-     about it. Every activity must register at least one real, meaningful action.
+   - \`bridge.registerAction(name, handler)\` — this is the ONLY thing that makes an entry in
+     your \`actions\` field real. Every single name you list in \`actions\` MUST have a matching
+     \`bridge.registerAction("that exact name", handlerFunction)\` call somewhere in your code —
+     with no exceptions. This is a hard, mechanical rule, not a suggestion: if you write
+     \`actions: [{name: "reset"}]\` but never call \`bridge.registerAction("reset", ...)\`
+     anywhere, that is a broken activity, even though it will compile and run without any
+     error. The \`actions\` field is NOT a list of your internal function names, event names, or
+     button labels — click handlers like \`handleSubmit\`, \`onReset\`, or event names like
+     \`"hint_requested"\` (which belongs in \`emitEvent\`, not \`actions\`) must NEVER appear in
+     \`actions\` unless you also separately call \`registerAction\` for that exact name. Correct
+     example:
+     \`\`\`
+     bridge.registerAction("reset_problem", () => { setValue(0); setFeedback(''); });
+     \`\`\`
+     paired with \`actions: [{name: "reset_problem", description: "..."}]\` in your response —
+     the string \`"reset_problem"\` must be character-for-character identical in both places.
+     Every activity must register at least one real, meaningful action this way.
      If the handler needs specific information to do its job (e.g. a "provide_hint" action's
      handler needs actual hint text, not just a bare call with no content), declare that in the
      action's \`args\` field with the exact key the handler reads off its payload object (e.g.
@@ -351,6 +364,28 @@ export function inferMissingActionArgs(
       })),
     };
   });
+}
+
+/**
+ * Deterministic check for the exact bug found in production: a small local codegen model
+ * (qwen2.5-coder:3b) generated an activity that compiled and ran perfectly fine, but never
+ * called bridge.registerAction() for ANY of the names it listed in `actions` — it had treated
+ * the field as a list of its own internal click-handler/event names instead of genuinely
+ * registered actions. The tutor could observe state but could never actually act on the
+ * activity ("Unknown action" on every attempt) — a silent, un-catchable-by-compilation failure
+ * of exactly the capability the brief calls "the most important part."
+ *
+ * Returns the names that have NO matching registerAction("that name", ...) call anywhere in
+ * the code — feed this back into the repair loop exactly like a compile error, since fixing it
+ * doesn't require regenerating everything, just actually wiring up the missing calls.
+ */
+export function findUnregisteredActions(
+  code: string,
+  actions: ActivityGeneration["actions"],
+): string[] {
+  return actions
+    .map((a) => a.name)
+    .filter((name) => !new RegExp(`registerAction\\s*\\(\\s*['"]${escapeRegExp(name)}['"]`).test(code));
 }
 
 function escapeRegExp(str: string): string {

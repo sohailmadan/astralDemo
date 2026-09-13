@@ -2,7 +2,7 @@ import { NoObjectGeneratedError } from "ai";
 import { after } from "next/server";
 import { NextResponse } from "next/server";
 
-import { generateActivityCode } from "@/lib/ai/generateActivity";
+import { findUnregisteredActions, generateActivityCode } from "@/lib/ai/generateActivity";
 import { MAX_REPAIR_ATTEMPTS } from "@/lib/generation-constants";
 import { createServiceClient } from "@/lib/supabase/service";
 import { traceEvent } from "@/lib/trace";
@@ -68,6 +68,23 @@ async function runGenerationPipeline(activityId: string, prompt: string) {
       const compiled = await compileActivity(generation.code);
 
       if (compiled.ok) {
+        // Compiling and running successfully doesn't mean the tutor can actually DO anything —
+        // found directly in production: an activity that compiled and rendered fine, but never
+        // called bridge.registerAction() for any of the names it declared in `actions`. Treated
+        // exactly like a compile failure (same repair-loop machinery, same attempt_history
+        // shape) since the fix doesn't need a fresh generation, just wiring up the missing call.
+        const unregistered = findUnregisteredActions(generation.code, generation.actions);
+        if (unregistered.length > 0) {
+          lastFailure = `Declared action(s) [${unregistered.join(", ")}] have no matching bridge.registerAction("<name>", ...) call anywhere in the code. Every name in \`actions\` must have an exact-match registerAction call — add the missing call(s), don't just remove the declaration.`;
+          priorAttempt = { code: generation.code, error: lastFailure };
+          attemptHistory.push({ attempt: attemptNumber, code: generation.code, error: lastFailure });
+          console.error(
+            `[generate] activity ${activityId} attempt ${attemptNumber}/${MAX_REPAIR_ATTEMPTS + 1} declared unregistered actions: ${unregistered.join(", ")}`,
+          );
+          await supabase.from("activities").update({ attempt_history: attemptHistory }).eq("id", activityId);
+          continue;
+        }
+
         attemptHistory.push({ attempt: attemptNumber, code: generation.code, error: null });
         await traceEvent({
           name: "compile-activity",

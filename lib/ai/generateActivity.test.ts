@@ -3,6 +3,7 @@ import { describe, expect, it } from "bun:test";
 import {
   ActivityGenerationSchema,
   escapeRawControlCharsInStrings,
+  findUnregisteredActions,
   inferMissingActionArgs,
 } from "./generateActivity";
 
@@ -84,6 +85,36 @@ describe("inferMissingActionArgs", () => {
     const actions = [{ name: "mystery_action", description: "Does something." }];
     const result = inferMissingActionArgs(code, actions);
     expect(result[0].args).toBeUndefined();
+  });
+});
+
+describe("findUnregisteredActions", () => {
+  it("returns nothing when every declared action has a matching registerAction call", () => {
+    const code = `
+      bridge.registerAction('reset', () => {});
+      bridge.registerAction('provide_hint', payload => setHint(payload.hint));
+    `;
+    const actions = [{ name: "reset" }, { name: "provide_hint" }];
+    expect(findUnregisteredActions(code, actions)).toEqual([]);
+  });
+
+  // Regression test: this is the exact bug found in production — a small local codegen model
+  // listed action names that were never actually registered anywhere (it had treated `actions`
+  // as a list of its own internal click-handler names), so the activity compiled and ran fine
+  // but the tutor got "Unknown action" on every single attempt to invoke one.
+  it("flags a declared action with no matching registerAction call anywhere", () => {
+    const code = `
+      const submit = () => { setResult(compute()); };
+      const handleAngle1Change = (e) => setAngle1(e.target.value);
+    `;
+    const actions = [{ name: "submit" }, { name: "handleAngle1Change" }];
+    expect(findUnregisteredActions(code, actions)).toEqual(["submit", "handleAngle1Change"]);
+  });
+
+  it("flags only the specific action(s) missing a call, not ones that are correctly registered", () => {
+    const code = `bridge.registerAction('reset', () => {});`;
+    const actions = [{ name: "reset" }, { name: "unregistered_one" }];
+    expect(findUnregisteredActions(code, actions)).toEqual(["unregistered_one"]);
   });
 });
 
