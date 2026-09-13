@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 
 import { generateActivityCode } from "@/lib/ai/generateActivity";
 import { MAX_REPAIR_ATTEMPTS } from "@/lib/generation-constants";
-import { compileActivity, type CompileError } from "@/lib/sandbox/compile";
+import { compileActivity, type CompileError } from "@/lib/validate/compile";
 import { createServiceClient } from "@/lib/supabase/service";
 
 // Vercel's actual serverless ceiling (even Pro + Fluid Compute) sits well under what 3

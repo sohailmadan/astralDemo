@@ -2,7 +2,7 @@
 
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 
-import { buildActivityIframeHtml } from "@/lib/sandbox/iframe-html";
+import { buildActivityIframeHtml } from "@/lib/validate/iframe-html";
 import type { Activity } from "@/lib/types";
 import type { ActivityToHostMessage } from "@/sdk/types";
 
@@ -26,7 +26,7 @@ export interface ActivityFrameHandle {
  * Renders the compiled activity inside a sandboxed iframe. See CLAUDE.md "Safely execute" —
  * `sandbox="allow-scripts"` only (deliberately no `allow-same-origin`) is what isolates this
  * from the host's cookies/storage/DOM; the iframe's own CSP (baked into the srcDoc, see
- * lib/sandbox/iframe-html.ts) is what blocks any network access from inside it.
+ * lib/validate/iframe-html.ts) is what blocks any network access from inside it.
  *
  * Forwards ref so the tutor chat (which lives in a sibling component, not inside this one) can
  * invoke `sendAction` without either side reaching into the other's internals — the imperative

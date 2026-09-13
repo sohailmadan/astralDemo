@@ -12,7 +12,7 @@ function postToHost(message: ActivityToHostMessage) {
 
 /**
  * The one hook every generated activity uses to talk to the tutor. Bundled directly into the
- * generated code by esbuild (see lib/sandbox/compile.ts) — this file has no dependency on our
+ * generated code by esbuild (see lib/validate/compile.ts) — this file has no dependency on our
  * Next.js app at runtime, it only needs React, which is bundled alongside it.
  */
 export function useTutorBridge(): TutorBridge {
