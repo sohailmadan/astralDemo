@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 
 import { ActivityWorkspace } from "@/components/activity/activity-workspace";
 import { GeneratingView } from "@/components/activity/generating-view";
+import { LearnHeader } from "@/components/activity/learn-header";
 import { getActivity, listTutorMessages } from "@/lib/supabase/queries";
 
 // Always render per-request — status can change between requests, never a candidate for the
@@ -22,7 +23,8 @@ export default async function LearnPage({ params }: { params: Promise<{ id: stri
 
   if (activity.status === "generating") {
     return (
-      <main className="mx-auto min-h-screen w-full max-w-2xl px-5 py-16">
+      <main className="mx-auto flex min-h-screen w-full max-w-2xl flex-col gap-8 px-5 py-8">
+        <LearnHeader />
         <GeneratingView
           activityId={activity.id}
           prompt={activity.prompt}
@@ -35,9 +37,12 @@ export default async function LearnPage({ params }: { params: Promise<{ id: stri
 
   if (activity.status === "failed") {
     return (
-      <main className="mx-auto flex min-h-screen w-full max-w-2xl flex-col items-center justify-center gap-3 px-5 py-16 text-center">
-        <p className="text-sm font-medium text-foreground">This activity couldn&rsquo;t be generated.</p>
-        {activity.error && <p className="text-xs text-muted-foreground">{activity.error}</p>}
+      <main className="mx-auto flex min-h-screen w-full max-w-2xl flex-col gap-8 px-5 py-8">
+        <LearnHeader />
+        <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
+          <p className="text-sm font-medium text-foreground">This activity couldn&rsquo;t be generated.</p>
+          {activity.error && <p className="text-xs text-muted-foreground">{activity.error}</p>}
+        </div>
       </main>
     );
   }
@@ -45,8 +50,11 @@ export default async function LearnPage({ params }: { params: Promise<{ id: stri
   const tutorMessages = await listTutorMessages(activity.id);
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-6 px-5 py-8 lg:flex-row">
-      <ActivityWorkspace activity={activity} initialMessages={tutorMessages} />
+    <main className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-6 px-5 py-8">
+      <LearnHeader title={activity.title} />
+      <div className="flex flex-1 flex-col gap-6 lg:flex-row">
+        <ActivityWorkspace activity={activity} initialMessages={tutorMessages} />
+      </div>
     </main>
   );
 }
