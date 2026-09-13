@@ -51,15 +51,21 @@ const OLLAMA_TUTOR_MODEL = process.env.OLLAMA_TUTOR_MODEL ?? "llama3.2:3b";
 // all, despite listing action names in its response — the tutor could observe state but never
 // actually act on the activity, the exact capability the brief calls "the most important
 // part." A 3B-class model, local or free-tier, is genuinely too small to reliably follow a
-// multi-part structural contract like this one. gpt-5.1-codex-mini (OpenAI's current
-// code-specialized small model, confirmed live on this account's /v1/models) is a real,
-// paid-per-token API call — this is NOT a production model choice, it's a local-only
-// escalation for when a free/local model's failures are genuinely about capability rather than
-// something a better prompt or a repair-loop retry can fix. Off by default; requires both
-// USE_OPENAI_CODEGEN=true and a real OPENAI_API_KEY.
+// multi-part structural contract like this one. This is NOT a production model choice, it's a
+// local-only escalation for when a free/local model's failures are genuinely about capability
+// rather than something a better prompt or a repair-loop retry can fix. Off by default;
+// requires both USE_OPENAI_CODEGEN=true and a real OPENAI_API_KEY.
+//
+// gpt-5.1-codex-mini (OpenAI's code-specialized small model) was tried first — it's listed as
+// live on this account's /v1/models, but every real call failed with "does not exist or you do
+// not have access to it," a real access-tier restriction distinct from the model merely being
+// listed in the catalog (Codex-branded models are often gated to the Responses API or a
+// different access tier than standard chat completions). Confirmed gpt-5-mini,
+// gpt-4.1-mini, and gpt-4o-mini are all genuinely callable on this account; gpt-5-mini is the
+// newest of those and used as the actual default.
 const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const USE_OPENAI_CODEGEN = process.env.USE_OPENAI_CODEGEN === "true";
-const OPENAI_CODEGEN_MODEL = process.env.OPENAI_CODEGEN_MODEL ?? "gpt-5.1-codex-mini";
+const OPENAI_CODEGEN_MODEL = process.env.OPENAI_CODEGEN_MODEL ?? "gpt-5-mini";
 
 // Verified live on OpenRouter's /api/v1/models as of this writing — both originally planned
 // models (openai/gpt-oss-120b:free, openai/gpt-oss-20b:free) were discontinued from the free
