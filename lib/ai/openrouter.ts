@@ -31,10 +31,32 @@ export const CODEGEN_FALLBACK_MODEL = "nvidia/nemotron-3-super-120b-a12b:free";
 // google/gemma-4-31b-it:free is temporarily rate-limited upstream" — Gemma-family free models
 // on OpenRouter route through Google AI Studio's OWN shared free quota, a separate bottleneck
 // from OpenRouter's, and one this app has no visibility or control over (the same failure mode
-// already documented above for google/gemma-4-26b-a4b-it:free). nvidia/nemotron-3.5-lightning
-// is explicitly branded for speed and isn't Google-quota-dependent — verify it's still live on
-// OpenRouter's /api/v1/models if it starts failing.
-export const TUTOR_MODEL = "nvidia/nemotron-3.5-lightning:free";
+// already documented above for google/gemma-4-26b-a4b-it:free).
+//
+// Then switched off nvidia/nemotron-3.5-lightning:free after a WORSE, distinct failure found in
+// production: a real hint request returned a tool call whose `hint` argument was several
+// paragraphs of raw, leaked internal reasoning — garbled multilingual text and a duplicated
+// <tool_call> XML fragment mixed directly INTO the argument value, rendered as-is in the
+// learner-facing hint box. Not a rate limit or a schema mismatch — the model's own tool-calling
+// response format doesn't cleanly separate reasoning from the final answer for this app's
+// tool-calling shape, and nothing in the AI SDK/OpenRouter layer catches that.
+//
+// Tested three replacement candidates directly (real API calls, both a tool-call scenario and a
+// plain Socratic-response scenario) before picking one:
+// - nex-agi/nex-n2.5-mini:free: ignored the registered tool entirely for a request that clearly
+//   warranted calling it — ruled out, not a corruption problem but a compliance one.
+// - inclusionai/ling-3.0-flash-vl:free: the cleanest of the three — correct, well-scoped hint
+//   text, reasoning properly isolated in providerMetadata rather than leaking into the tool
+//   args. But hit "[Novita] ... temporarily rate-limited upstream" on the very next call — a
+//   third distinct shared-upstream-quota provider (after Google AI Studio for Gemma), the same
+//   availability risk class already documented, not something this app can control.
+// - liquid/lfm-2.5-2.6b:free: also clean, uncorrupted tool-call output. Weaker on the Socratic
+//   rule specifically — given a wrong-answer scenario, it explained the full solution directly
+//   rather than asking the learner to walk through their reasoning first. A real, named
+//   trade-off: clean output every time beats occasionally-correct behavior wrapped in corrupted
+//   output, so this is the pick despite that gap — worth re-testing if the Socratic behavior
+//   turns out to matter more in practice than this one test suggested.
+export const TUTOR_MODEL = "liquid/lfm-2.5-2.6b:free";
 export const TUTOR_FALLBACK_MODEL = "nvidia/nemotron-3-super-120b-a12b:free";
 
 export function codegenModel(modelId: string = CODEGEN_MODEL) {
