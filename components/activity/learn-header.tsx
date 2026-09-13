@@ -1,6 +1,8 @@
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 
+import { NavProgressBar } from "@/components/generate/nav-progress-bar";
+
 /**
  * Shared header across all three Learn-page states (generating/failed/ready) — a direct-URL
  * hit (refresh, shared link) with no prior navigation history has no reliable way back to the
@@ -13,6 +15,7 @@ export function LearnHeader({ title }: { title?: string | null }) {
         href="/"
         className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
       >
+        <NavProgressBar />
         <ArrowLeft className="size-4" aria-hidden="true" />
         Back to activities
       </Link>
