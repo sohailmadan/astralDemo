@@ -287,6 +287,16 @@ Fix only what's broken and return the corrected activity in full.`
         // succeed at all; it is not the production-ready number. See CLAUDE.md "Reliability."
         abortSignal: AbortSignal.timeout(600_000),
         repairText: repairModelJson,
+        // OpenAI's strict structured-outputs mode (the @ai-sdk/openai provider's default)
+        // requires every property in the schema to appear in JSON Schema's `required` array —
+        // it has no concept of "optional," only "present but nullable." Our schema uses plain
+        // Zod .optional() on several fields specifically because free/local models don't
+        // reliably fill them in (see the .optional() fields' own comments) — under strict mode
+        // that produces a hard, deterministic API-level rejection on every single attempt
+        // ("'required' is required to be supplied... Missing 'description'"), not a retryable
+        // model failure. This key is OpenAI-specific and namespaced; other providers
+        // (OpenRouter, Ollama via its OpenAI-compatible endpoint) simply ignore it.
+        providerOptions: { openai: { strictJsonSchema: false } },
       }),
   );
 
