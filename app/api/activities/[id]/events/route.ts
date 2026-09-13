@@ -53,3 +53,31 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (error) return NextResponse.json({ error: "Could not store event." }, { status: 500 });
   return NextResponse.json({ ok: true });
 }
+
+/**
+ * Clears an activity's tracked progress — the activity_events log and the last_state snapshot
+ * — so the tutor's context genuinely starts fresh (computeProgressSummary sees an empty log,
+ * last_state is null). Deliberately separate from DELETE .../tutor-messages: clearing the
+ * conversation and clearing what the tutor knows about the learner's progress are two
+ * different resets a learner might want independently.
+ *
+ * Scope, named explicitly rather than implied: this does NOT reset what's currently rendered
+ * inside the sandboxed iframe — the activity's own on-screen state (e.g. mid-problem) is
+ * whatever it currently is until the activity's own reset-style action is used. This only
+ * clears the durable record the tutor reads, so a stale on-screen state and a cleared record
+ * can briefly disagree until the activity itself is reset too.
+ */
+export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const supabase = createServiceClient();
+
+  const [eventsResult, stateResult] = await Promise.all([
+    supabase.from("activity_events").delete().eq("activity_id", id),
+    supabase.from("activities").update({ last_state: null }).eq("id", id),
+  ]);
+
+  if (eventsResult.error || stateResult.error) {
+    return NextResponse.json({ error: "Could not reset progress." }, { status: 500 });
+  }
+  return NextResponse.json({ ok: true });
+}

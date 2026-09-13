@@ -32,6 +32,7 @@ export const TutorChat = forwardRef<
   const [input, setInput] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
 
   async function handleClear() {
     setIsClearing(true);
@@ -42,6 +43,22 @@ export const TutorChat = forwardRef<
       }
     } finally {
       setIsClearing(false);
+    }
+  }
+
+  // Distinct from "Clear chat": this clears what the tutor knows about the learner's progress
+  // (activity_events + last_state), not the conversation itself. Does not touch what's
+  // currently rendered inside the activity — the learner may also want to use the activity's
+  // own reset action to match, called out in the confirmation so it isn't assumed automatic.
+  async function handleResetProgress() {
+    if (!confirm("Reset the tutor's memory of your progress on this activity? This won't undo the chat, and won't reset the activity itself if it's mid-problem.")) {
+      return;
+    }
+    setIsResetting(true);
+    try {
+      await fetch(`/api/activities/${activityId}/events`, { method: "DELETE" });
+    } finally {
+      setIsResetting(false);
     }
   }
 
@@ -107,17 +124,27 @@ export const TutorChat = forwardRef<
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col gap-3 rounded-lg border border-border bg-card p-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <h2 className="text-sm font-medium text-foreground">Tutor</h2>
-        {messages.length > 0 && (
+        <div className="flex items-center gap-3">
           <button
-            onClick={handleClear}
-            disabled={isClearing}
+            onClick={handleResetProgress}
+            disabled={isResetting}
+            title="Clears what the tutor knows about your progress on this activity (not the activity itself)."
             className="text-xs text-muted-foreground underline-offset-2 hover:underline disabled:opacity-50"
           >
-            Clear chat
+            Reset progress
           </button>
-        )}
+          {messages.length > 0 && (
+            <button
+              onClick={handleClear}
+              disabled={isClearing}
+              className="text-xs text-muted-foreground underline-offset-2 hover:underline disabled:opacity-50"
+            >
+              Clear chat
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
