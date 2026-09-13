@@ -255,7 +255,7 @@ Fix only what's broken and return the corrected activity in full.`
   const { object } = await traceGeneration(
     {
       name: "generate-activity",
-      model: effectiveModelId(modelId),
+      model: effectiveModelId(modelId, "codegen"),
       input: { system: SYSTEM_PROMPT, prompt: userContent },
     },
     () =>

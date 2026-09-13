@@ -25,16 +25,25 @@ const openrouter = createOpenRouter({
 //
 // Model size matters here: this machine has 16GB total RAM. gpt-oss:20b (a 13GB file,
 // originally pulled and tested) is too large — running it leaves almost no headroom for the OS
-// and everything else, risking making the whole machine unresponsive. llama3.2:3b (~2GB,
-// tool-calling capable) is the actual default used — pick something similarly sized for your
-// own machine's real available RAM, not just whatever model happens to be biggest/best.
+// and everything else, risking making the whole machine unresponsive. Both models below are
+// ~2GB — pick something similarly sized for your own machine's real available RAM, not just
+// whatever model happens to be biggest/best.
+//
+// Two different local models, not one shared — found directly by testing: llama3.2:3b (a
+// general-purpose chat model) handled the tutor's plain chat/tool-calling role correctly, but
+// failed all 3 attempts at generating an activity with genuine JSX/TSX syntax errors every
+// time ("Unexpected '{'", "Expected '>' but found '}'") — a real capability gap for a small
+// general-purpose model at structured code generation, not a pipeline bug. qwen2.5-coder:3b (a
+// code-specialized model at a similarly safe size) is used for codegen instead, since code
+// generation specifically is what it's built for.
 const ollama = createOpenAI({
   baseURL: "http://localhost:11434/v1",
   apiKey: "ollama", // required by the client shape; ignored by Ollama itself
 });
 
 const USE_LOCAL_OLLAMA = process.env.USE_LOCAL_OLLAMA === "true";
-const OLLAMA_MODEL = process.env.OLLAMA_MODEL ?? "llama3.2:3b";
+const OLLAMA_CODEGEN_MODEL = process.env.OLLAMA_CODEGEN_MODEL ?? "qwen2.5-coder:3b";
+const OLLAMA_TUTOR_MODEL = process.env.OLLAMA_TUTOR_MODEL ?? "llama3.2:3b";
 
 // Verified live on OpenRouter's /api/v1/models as of this writing — both originally planned
 // models (openai/gpt-oss-120b:free, openai/gpt-oss-20b:free) were discontinued from the free
@@ -84,12 +93,12 @@ export const TUTOR_MODEL = "liquid/lfm-2.5-2.6b:free";
 export const TUTOR_FALLBACK_MODEL = "nvidia/nemotron-3-super-120b-a12b:free";
 
 export function codegenModel(modelId: string = CODEGEN_MODEL) {
-  if (USE_LOCAL_OLLAMA) return ollama(OLLAMA_MODEL);
+  if (USE_LOCAL_OLLAMA) return ollama(OLLAMA_CODEGEN_MODEL);
   return openrouter(modelId);
 }
 
 export function tutorModel(modelId: string = TUTOR_MODEL) {
-  if (USE_LOCAL_OLLAMA) return ollama(OLLAMA_MODEL);
+  if (USE_LOCAL_OLLAMA) return ollama(OLLAMA_TUTOR_MODEL);
   return openrouter(modelId);
 }
 
@@ -97,8 +106,10 @@ export function tutorModel(modelId: string = TUTOR_MODEL) {
  * What actually ran, for Langfuse traces — without this, a trace would keep labeling every
  * generation "cohere/north-mini-code:free" even while USE_LOCAL_OLLAMA silently redirected the
  * real call to a completely different local model, which would be a misleading observability
- * record of what happened.
+ * record of what happened. Takes which role called it, since codegen and tutor use different
+ * local models.
  */
-export function effectiveModelId(requestedModelId: string): string {
-  return USE_LOCAL_OLLAMA ? `ollama:${OLLAMA_MODEL}` : requestedModelId;
+export function effectiveModelId(requestedModelId: string, role: "codegen" | "tutor"): string {
+  if (!USE_LOCAL_OLLAMA) return requestedModelId;
+  return `ollama:${role === "codegen" ? OLLAMA_CODEGEN_MODEL : OLLAMA_TUTOR_MODEL}`;
 }

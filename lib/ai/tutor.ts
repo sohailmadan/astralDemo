@@ -150,7 +150,7 @@ export async function getTutorReply(params: {
   ];
 
   const result = await traceGeneration(
-    { name: "tutor-turn", model: effectiveModelId(TUTOR_MODEL), input: { system, messages } },
+    { name: "tutor-turn", model: effectiveModelId(TUTOR_MODEL, "tutor"), input: { system, messages } },
     () =>
       generateText({
         model: tutorModel(),
