@@ -16,6 +16,15 @@ export const ActivityGenerationSchema = z.object({
         description: z
           .string()
           .describe("What this action does, in plain language — used to build the tutor's tools."),
+        // Optional, not required: a free model that otherwise produces a perfectly valid
+        // response can still omit this field for a simple action (e.g. one with no arguments)
+        // without realizing that's meaningful — if this were required, that single omission
+        // fails the ENTIRE response's schema validation before any code is even produced,
+        // discarding an otherwise-good generation over one missing empty array. Found directly
+        // in production: two consecutive real failures ("response did not match schema") on
+        // cohere/north-mini-code:free, neither of which had any code to show for a repair
+        // attempt to work from — this is a worse failure mode than the args-less contract it
+        // replaced, not a strict improvement, until this is optional.
         args: z
           .array(
             z.object({
@@ -25,8 +34,9 @@ export const ActivityGenerationSchema = z.object({
                 .describe("What this argument means, in plain language — used to build the tutor's tool schema, so the tutor knows to actually fill it in."),
             }),
           )
+          .optional()
           .describe(
-            "String arguments this action's handler expects on its payload object, if any (e.g. a hint action expecting { hint: string }). Empty array for a zero-argument action like reset.",
+            "String arguments this action's handler expects on its payload object, if any (e.g. a hint action expecting { hint: string }). Omit or leave empty for a zero-argument action like reset.",
           ),
       }),
     )
