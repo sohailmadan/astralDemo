@@ -8,7 +8,10 @@ export type ActivityStatus = "generating" | "ready" | "failed";
 
 export interface ActivityActionArg {
   name: string;
-  description: string;
+  // Optional: a real model has been observed substituting its own field (e.g. {name, type})
+  // for this one — falling back to the arg's name (see lib/ai/tutor.ts's
+  // buildActionInputSchema) keeps that generation usable instead of discarding it outright.
+  description?: string;
 }
 
 export interface ActivityAction {

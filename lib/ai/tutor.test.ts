@@ -89,4 +89,13 @@ describe("buildActionInputSchema", () => {
     const schema = buildActionInputSchema([{ name: "hint", description: "The hint text to show." }]);
     expect(schema.safeParse({}).success).toBe(true);
   });
+
+  // Regression test: a real production failure had the codegen model substitute {name, type}
+  // for our {name, description} arg shape — description missing entirely. Still needs to build
+  // a usable schema rather than fail, since the arg's own name is a reasonable fallback label.
+  it("still builds a usable field when an arg's description is missing", () => {
+    const schema = buildActionInputSchema([{ name: "hint" }]);
+    const result = schema.safeParse({ hint: "Divide 4 by 12." });
+    expect(result.success).toBe(true);
+  });
 });

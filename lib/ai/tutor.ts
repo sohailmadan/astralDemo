@@ -107,7 +107,12 @@ export interface TutorReply {
 export function buildActionInputSchema(args?: ActivityActionArg[]) {
   if (!args || args.length === 0) return z.object({});
   return z.object(
-    Object.fromEntries(args.map((arg) => [arg.name, z.string().optional().describe(arg.description)])),
+    Object.fromEntries(
+      // Falls back to the arg's own name when description is missing — a real model has been
+      // observed omitting it (substituting its own {name, type} shape instead), and the tool
+      // still needs SOME text to describe the field by, even if less specific than intended.
+      args.map((arg) => [arg.name, z.string().optional().describe(arg.description ?? arg.name)]),
+    ),
   );
 }
 

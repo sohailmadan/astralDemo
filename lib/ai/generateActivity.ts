@@ -29,8 +29,17 @@ export const ActivityGenerationSchema = z.object({
           .array(
             z.object({
               name: z.string().describe("Key the handler reads off its payload object, e.g. \"hint\"."),
+              // Optional too, same reasoning as args itself: found directly in production, the
+              // model produced {"name":"hint","type":"string"} instead of our {name,
+              // description} shape — defaulting to the familiar OpenAI-style function-parameter
+              // convention ({name, type}) rather than following this specific contract. That one
+              // substitution failed the entire response's validation. description alone is
+              // enough to build a usable tool schema (see lib/ai/tutor.ts's
+              // buildActionInputSchema, which falls back to the arg's name when it's missing) —
+              // not worth losing an otherwise-good generation over.
               description: z
                 .string()
+                .optional()
                 .describe("What this argument means, in plain language — used to build the tutor's tool schema, so the tutor knows to actually fill it in."),
             }),
           )
@@ -210,6 +219,17 @@ Fix only what's broken and return the corrected activity in full.`
         repairText: stripMarkdownFence,
       }),
   );
+
+  // A distinct fence problem from the one below: found directly in production, the model can
+  // produce perfectly valid JSON where the `code` FIELD'S OWN STRING VALUE is wrapped in a
+  // ```tsx ... ``` fence — passes schema validation fine (it's still a string), but would fail
+  // to compile since the fence markers are literal text baked into what's supposed to be TSX
+  // source. stripMarkdownFence (below) can't catch this — it only strips a fence around the
+  // ENTIRE response text, before JSON.parse ever runs, not inside one already-parsed field.
+  const codeFenceMatch = object.code.match(/^```(?:tsx?|jsx?)?\s*\n([\s\S]*?)\n```\s*$/);
+  if (codeFenceMatch) {
+    return { ...object, code: codeFenceMatch[1] };
+  }
 
   return object;
 }
