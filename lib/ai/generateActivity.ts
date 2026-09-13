@@ -264,11 +264,75 @@ Fix only what's broken and return the corrected activity in full.`
   const codeFenceMatch = object.code.match(
     /^```(?:tsx?|jsx?)?\s*\n([\s\S]*?)\n```\s*$/,
   );
-  if (codeFenceMatch) {
-    return { ...object, code: codeFenceMatch[1] };
-  }
+  const finalCode = codeFenceMatch ? codeFenceMatch[1] : object.code;
 
-  return object;
+  // Prompt instructions alone haven't been reliable here: found THREE separate times in
+  // production, on three different activities, that the model declares an action but omits
+  // `args` even though its own handler clearly reads payload.hint — repeating the exact same
+  // "hint sent but nothing visible" bug each time despite the system prompt explicitly asking
+  // for this. Rather than keep patching each generated activity's stored `actions` by hand
+  // (doesn't scale — every new generation can reproduce the same gap), this derives the real
+  // requirement directly and deterministically from the code the model actually wrote, so it
+  // no longer depends on the model remembering to declare it correctly.
+  const finalActions = inferMissingActionArgs(finalCode, object.actions);
+
+  return { ...object, code: finalCode, actions: finalActions };
+}
+
+/**
+ * For any action missing `args`, scans the source for `payload.<field>`/`payload?.<field>`
+ * access within a window of text right after that action's `registerAction(...)` call — an
+ * approximation of "the handler passed to this call," not a full parser. Catches the pattern
+ * observed in every real occurrence so far (an inline arrow function directly accessing
+ * payload.<field>). Named limits, not hidden: won't catch destructuring
+ * (`const { hint } = payload`) or a handler defined elsewhere and only referenced by name.
+ * Exported for testing.
+ */
+export function inferMissingActionArgs(
+  code: string,
+  actions: ActivityGeneration["actions"],
+): ActivityGeneration["actions"] {
+  // Every registerAction(...) call's position, in source order — used to bound each action's
+  // scan window at the START of the NEXT call (any name), not a fixed size. A fixed-size window
+  // (tried first) bled a second action's payload field into an earlier one whenever two
+  // handlers sat close together in the source, which real generated code does often — caught by
+  // this function's own test suite before it ever reached production.
+  const allCallPositions = Array.from(code.matchAll(/registerAction\s*\(\s*['"][^'"]+['"]/g)).map(
+    (m) => m.index,
+  );
+
+  return actions.map((action) => {
+    if (action.args && action.args.length > 0) return action;
+
+    const registerCallPattern = new RegExp(
+      `registerAction\\s*\\(\\s*['"]${escapeRegExp(action.name)}['"]`,
+    );
+    const match = registerCallPattern.exec(code);
+    if (!match) return action;
+
+    const windowEnd = allCallPositions.find((pos) => pos > match.index) ?? code.length;
+    const windowText = code.slice(match.index, windowEnd);
+    const fieldNames = new Set<string>();
+    const fieldPattern = /payload\??\.(\w+)/g;
+    let fieldMatch: RegExpExecArray | null;
+    while ((fieldMatch = fieldPattern.exec(windowText))) {
+      fieldNames.add(fieldMatch[1]);
+    }
+
+    if (fieldNames.size === 0) return action;
+
+    return {
+      ...action,
+      args: Array.from(fieldNames).map((name) => ({
+        name,
+        description: `Inferred from the handler's own payload.${name} access — the model did not declare this argument itself.`,
+      })),
+    };
+  });
+}
+
+function escapeRegExp(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 // Also observed directly in testing: cohere/north-mini-code:free otherwise produces good
