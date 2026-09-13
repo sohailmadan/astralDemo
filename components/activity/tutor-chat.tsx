@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { forwardRef, useImperativeHandle, useState } from "react";
 
 import type { TutorActionCall, TutorMessage } from "@/lib/types";
 
@@ -13,25 +13,28 @@ function toChatMessage(m: TutorMessage): ChatMessage {
   return { id: m.id, role: m.role, content: m.content };
 }
 
-export function TutorChat({
-  activityId,
-  initialMessages,
-  onActionCall,
-}: {
-  activityId: string;
-  initialMessages: TutorMessage[];
-  onActionCall: (name: string, args: Record<string, unknown>) => Promise<{ ok: boolean; error?: string }>;
-}) {
+export interface TutorChatHandle {
+  /** Sends a message to the tutor exactly as if the learner had typed it — used both by the
+   * composer below and by activity-workspace.tsx to auto-forward events like
+   * "hint_requested" into a real tutor turn, so the chat transcript reads naturally either way. */
+  sendMessage(text: string): Promise<void>;
+}
+
+export const TutorChat = forwardRef<
+  TutorChatHandle,
+  {
+    activityId: string;
+    initialMessages: TutorMessage[];
+    onActionCall: (name: string, args: Record<string, unknown>) => Promise<{ ok: boolean; error?: string }>;
+  }
+>(function TutorChat({ activityId, initialMessages, onActionCall }, ref) {
   const [messages, setMessages] = useState<ChatMessage[]>(() => initialMessages.map(toChatMessage));
   const [input, setInput] = useState("");
   const [isSending, setIsSending] = useState(false);
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    const text = input.trim();
-    if (!text || isSending) return;
+  async function sendMessage(text: string) {
+    if (!text.trim() || isSending) return;
 
-    setInput("");
     setIsSending(true);
     setMessages((prev) => [...prev, { id: `local-${Date.now()}`, role: "user", content: text }]);
 
@@ -79,6 +82,16 @@ export function TutorChat({
     }
   }
 
+  useImperativeHandle(ref, () => ({ sendMessage }));
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const text = input.trim();
+    if (!text) return;
+    setInput("");
+    await sendMessage(text);
+  }
+
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col gap-3 rounded-lg border border-border bg-card p-4">
       <h2 className="text-sm font-medium text-foreground">Tutor</h2>
@@ -123,4 +136,4 @@ export function TutorChat({
       </form>
     </div>
   );
-}
+});

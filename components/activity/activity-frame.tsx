@@ -32,8 +32,20 @@ export interface ActivityFrameHandle {
  * invoke `sendAction` without either side reaching into the other's internals — the imperative
  * handle is the entire coupling surface between them.
  */
-export const ActivityFrame = forwardRef<ActivityFrameHandle, { activity: Activity }>(
-  function ActivityFrame({ activity }, ref) {
+interface ActivityFrameProps {
+  activity: Activity;
+  /**
+   * Fired for every EVENT the activity emits, in addition to the persistence POST below —
+   * this is the hook the tutor chat uses to react to specific events (see
+   * activity-workspace.tsx: "hint_requested" auto-forwards into a tutor turn). Without this,
+   * emitEvent("hint_requested", ...) only ever reached the durable log, never the tutor —
+   * a "Need a hint?" button that looked wired but did nothing visible.
+   */
+  onEvent?: (eventType: string, payload: unknown) => void;
+}
+
+export const ActivityFrame = forwardRef<ActivityFrameHandle, ActivityFrameProps>(
+  function ActivityFrame({ activity, onEvent }, ref) {
     const iframeRef = useRef<HTMLIFrameElement>(null);
     const [status, setStatus] = useState<"loading" | "ready" | "hung">("loading");
     const [height, setHeight] = useState(MIN_IFRAME_HEIGHT);
@@ -102,6 +114,7 @@ export const ActivityFrame = forwardRef<ActivityFrameHandle, { activity: Activit
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ kind: "event", eventType: data.eventType, payload: data.payload }),
           });
+          onEvent?.(data.eventType, data.payload);
         }
 
         if (data.type === "ACTION_RESULT" && pendingActionRef.current?.name === data.name) {
@@ -115,7 +128,7 @@ export const ActivityFrame = forwardRef<ActivityFrameHandle, { activity: Activit
         window.removeEventListener("message", handleMessage);
         clearTimeout(timeout);
       };
-    }, [srcDoc, activity.id]);
+    }, [srcDoc, activity.id, onEvent]);
 
     if (!srcDoc) {
       return (

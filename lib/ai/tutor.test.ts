@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { computeProgressSummary } from "./tutor";
+import { buildActionInputSchema, computeProgressSummary } from "./tutor";
 import type { ActivityEvent } from "../types";
 
 function event(type: string): ActivityEvent {
@@ -34,5 +34,34 @@ describe("computeProgressSummary", () => {
     const summary = computeProgressSummary([event("point_moved"), event("point_moved"), event("challenge_reset")]);
     expect(summary).toContain("point moved: 2");
     expect(summary).toContain("challenge reset: 1");
+  });
+});
+
+describe("buildActionInputSchema", () => {
+  it("builds an empty schema for a zero-argument action", () => {
+    const schema = buildActionInputSchema([]);
+    expect(schema.safeParse({}).success).toBe(true);
+  });
+
+  it("builds an empty schema when args is undefined (rows generated before this field existed)", () => {
+    const schema = buildActionInputSchema(undefined);
+    expect(schema.safeParse({}).success).toBe(true);
+  });
+
+  // Regression test: this is exactly the bug found on a live "provide_hint" action — an empty
+  // schema meant the tutor could only ever call it with {}, so the hint box rendered with no
+  // hint text, even though the model wanted to fill one in.
+  it("gives a declared arg its own field in the schema", () => {
+    const schema = buildActionInputSchema([{ name: "hint", description: "The hint text to show." }]);
+    const result = schema.safeParse({ hint: "Try dividing the first digit." });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect((result.data as Record<string, unknown>).hint).toBe("Try dividing the first digit.");
+    }
+  });
+
+  it("keeps a declared arg optional, so the model isn't forced to fill it in every time", () => {
+    const schema = buildActionInputSchema([{ name: "hint", description: "The hint text to show." }]);
+    expect(schema.safeParse({}).success).toBe(true);
   });
 });

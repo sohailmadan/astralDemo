@@ -16,6 +16,18 @@ export const ActivityGenerationSchema = z.object({
         description: z
           .string()
           .describe("What this action does, in plain language — used to build the tutor's tools."),
+        args: z
+          .array(
+            z.object({
+              name: z.string().describe("Key the handler reads off its payload object, e.g. \"hint\"."),
+              description: z
+                .string()
+                .describe("What this argument means, in plain language — used to build the tutor's tool schema, so the tutor knows to actually fill it in."),
+            }),
+          )
+          .describe(
+            "String arguments this action's handler expects on its payload object, if any (e.g. a hint action expecting { hint: string }). Empty array for a zero-argument action like reset.",
+          ),
       }),
     )
     .describe("Named actions this activity registers that the tutor may invoke."),
@@ -58,6 +70,12 @@ CONTRACT — the generated code must follow this exactly:
      \`actions\` field of your response, so the tutor can actually do something inside the
      activity (e.g. highlight a step, change a value, reset with new numbers), not just talk
      about it. Every activity must register at least one real, meaningful action.
+     If the handler needs specific information to do its job (e.g. a "provide_hint" action's
+     handler needs actual hint text, not just a bare call with no content), declare that in the
+     action's \`args\` field with the exact key the handler reads off its payload object (e.g.
+     \`payload.hint\`) — this is what lets the tutor actually fill it in with real content
+     instead of calling the action with nothing. Leave \`args\` empty only for a genuinely
+     zero-argument action like "reset".
 
 4. Styling: Tailwind utility classes only, using concrete palette classes (e.g. bg-sky-500,
    text-slate-900, border-slate-200) — NEVER semantic aliases like bg-primary or text-foreground,

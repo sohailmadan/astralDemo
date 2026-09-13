@@ -27,7 +27,14 @@ const openrouter = createOpenRouter({
 export const CODEGEN_MODEL = "cohere/north-mini-code:free";
 export const CODEGEN_FALLBACK_MODEL = "nvidia/nemotron-3-super-120b-a12b:free";
 
-export const TUTOR_MODEL = "google/gemma-4-31b-it:free"; // instruction-tuned, good dialogue
+// Switched off google/gemma-4-31b-it:free after a real failure: "[Google AI Studio]
+// google/gemma-4-31b-it:free is temporarily rate-limited upstream" — Gemma-family free models
+// on OpenRouter route through Google AI Studio's OWN shared free quota, a separate bottleneck
+// from OpenRouter's, and one this app has no visibility or control over (the same failure mode
+// already documented above for google/gemma-4-26b-a4b-it:free). nvidia/nemotron-3.5-lightning
+// is explicitly branded for speed and isn't Google-quota-dependent — verify it's still live on
+// OpenRouter's /api/v1/models if it starts failing.
+export const TUTOR_MODEL = "nvidia/nemotron-3.5-lightning:free";
 export const TUTOR_FALLBACK_MODEL = "nvidia/nemotron-3-super-120b-a12b:free";
 
 export function codegenModel(modelId: string = CODEGEN_MODEL) {

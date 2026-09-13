@@ -2,7 +2,7 @@ import { generateText, tool } from "ai";
 import { z } from "zod";
 
 import { traceGeneration } from "../trace";
-import type { Activity, ActivityEvent, TutorMessage } from "../types";
+import type { Activity, ActivityActionArg, ActivityEvent, TutorMessage } from "../types";
 import { TUTOR_MODEL, tutorModel } from "./openrouter";
 
 // Same shape as the generation repair loop's bound (see CLAUDE.md "AI tutor <-> activity
@@ -67,17 +67,25 @@ export interface TutorReply {
   actionCall?: { name: string; args: Record<string, unknown> };
 }
 
+// Every declared arg is modeled as an optional string — loose on purpose. The generation
+// contract only asks the codegen model for a plain-language description per arg, not a real
+// type, so a string the tutor fills in from that description is the most it can reliably
+// produce; a genuinely numeric/boolean argument would still arrive as a string the generated
+// handler must parse itself. Real limitation, no longer "no schema at all" (which produced
+// empty {} args for every action, including ones whose handler needed real content — found
+// directly on a live "provide_hint" action that rendered its hint box with no hint text).
+export function buildActionInputSchema(args?: ActivityActionArg[]) {
+  if (!args || args.length === 0) return z.object({});
+  return z.object(
+    Object.fromEntries(args.map((arg) => [arg.name, z.string().optional().describe(arg.description)])),
+  );
+}
+
 /**
  * One tutor turn: assembles context fresh (system prompt regenerated from current
  * state/progress every call — never cached, since both change turn to turn) and calls the
  * model with tools built from the activity's own registered actions, so a tool call is
  * schema-checked before it can ever reach the sandboxed iframe.
- *
- * Known simplification, not hidden: the generation contract only gives us a name + plain-
- * English description per action, no argument schema — so every tool here is registered with
- * an empty input schema (z.object({})). This works for zero-argument actions (e.g. "reset")
- * but gives the model nothing to work from for an action that genuinely needs structured
- * arguments. Documented in the README as a real gap, not solved here.
  */
 export async function getTutorReply(params: {
   activity: Activity;
@@ -92,7 +100,7 @@ export async function getTutorReply(params: {
   const tools = Object.fromEntries(
     activity.actions.map((action) => [
       action.name,
-      tool({ description: action.description, inputSchema: z.object({}) }),
+      tool({ description: action.description, inputSchema: buildActionInputSchema(action.args) }),
     ]),
   );
 

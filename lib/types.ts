@@ -6,9 +6,17 @@
 
 export type ActivityStatus = "generating" | "ready" | "failed";
 
+export interface ActivityActionArg {
+  name: string;
+  description: string;
+}
+
 export interface ActivityAction {
   name: string;
   description: string;
+  // Optional for backward compatibility with rows generated before this field existed —
+  // treat a missing value the same as an empty array (a zero-argument action).
+  args?: ActivityActionArg[];
 }
 
 export interface AttemptRecord {
