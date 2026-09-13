@@ -5,17 +5,27 @@ import { traceGeneration } from "../trace";
 import { CODEGEN_MODEL, codegenModel } from "./openrouter";
 
 export const ActivityGenerationSchema = z.object({
-  title: z.string().describe("Short, human-readable title shown in the activity list."),
+  title: z
+    .string()
+    .describe("Short, human-readable title shown in the activity list."),
   code: z
     .string()
-    .describe("The full TSX source for the Activity component, per the system prompt's contract."),
+    .describe(
+      "The full TSX source for the Activity component, per the system prompt's contract.",
+    ),
   actions: z
     .array(
       z.object({
-        name: z.string().describe("Identifier passed to registerAction() in the generated code."),
+        name: z
+          .string()
+          .describe(
+            "Identifier passed to registerAction() in the generated code.",
+          ),
         description: z
           .string()
-          .describe("What this action does, in plain language — used to build the tutor's tools."),
+          .describe(
+            "What this action does, in plain language — used to build the tutor's tools.",
+          ),
         // Optional, not required: a free model that otherwise produces a perfectly valid
         // response can still omit this field for a simple action (e.g. one with no arguments)
         // without realizing that's meaningful — if this were required, that single omission
@@ -28,7 +38,11 @@ export const ActivityGenerationSchema = z.object({
         args: z
           .array(
             z.object({
-              name: z.string().describe("Key the handler reads off its payload object, e.g. \"hint\"."),
+              name: z
+                .string()
+                .describe(
+                  'Key the handler reads off its payload object, e.g. "hint".',
+                ),
               // Optional too, same reasoning as args itself: found directly in production, the
               // model produced {"name":"hint","type":"string"} instead of our {name,
               // description} shape — defaulting to the familiar OpenAI-style function-parameter
@@ -40,7 +54,9 @@ export const ActivityGenerationSchema = z.object({
               description: z
                 .string()
                 .optional()
-                .describe("What this argument means, in plain language — used to build the tutor's tool schema, so the tutor knows to actually fill it in."),
+                .describe(
+                  "What this argument means, in plain language — used to build the tutor's tool schema, so the tutor knows to actually fill it in.",
+                ),
             }),
           )
           .optional()
@@ -49,7 +65,9 @@ export const ActivityGenerationSchema = z.object({
           ),
       }),
     )
-    .describe("Named actions this activity registers that the tutor may invoke."),
+    .describe(
+      "Named actions this activity registers that the tutor may invoke.",
+    ),
 });
 
 export type ActivityGeneration = z.infer<typeof ActivityGenerationSchema>;
@@ -59,36 +77,49 @@ export type ActivityGeneration = z.infer<typeof ActivityGenerationSchema>;
  * constrained rather than "generate any TSX". Every rule here exists because loosening it
  * makes validation, sandboxing, or the tutor-action interface harder for no learner benefit.
  */
-const SYSTEM_PROMPT = `You generate a single interactive React learning activity as TypeScript/TSX.
+const SYSTEM_PROMPT = `PEDAGOGICAL GOAL:
 
-The output must be REAL interactive software the learner explores the concept with — never an
-article, a wall of explanatory text, or a static quiz. If the learning request is "teach me
-about slope", do not explain slope in prose; build something the learner drags, clicks, types
-into, or otherwise manipulates to discover it themselves.
+The activity must TEACH through interaction, not explain the topic and then test it.
 
-PEDAGOGICAL GOAL:
+Assume the learner knows nothing. Do NOT put the lesson in paragraphs, definitions,
+examples, or a "What is X?" section before the interaction. The learner must discover
+the idea by manipulating the activity.
 
-The activity must teach, not merely test. Assume the learner may know nothing about the concept.
+Every important concept introduced must immediately be connected to an interaction.
 
-Do not begin by asking the learner to solve the final problem. First guide them through the
-concept using small interactive steps where they:
-- see a concrete representation,
-- make one decision at a time,
-- immediately see the consequence,
-- understand briefly WHY it happened,
-- gradually receive less scaffolding,
-- then apply the concept independently.
+For example, when teaching prime numbers, do NOT begin with:
+"A prime number has exactly two factors..."
+Instead, give the learner a number and let them interactively find/check its factors.
+Then use what they discovered to help them notice the pattern that defines a prime.
 
-For procedural concepts, teach by doing: guide the learner through the first example
-step-by-step, showing BEFORE → ACTION → AFTER, then give them a new example to try.
+Use this learning loop:
 
-At every moment, the learner should clearly understand:
-"What am I trying to figure out?"
-"What can I interact with?"
-"What happened because of my action?"
+OBSERVE → PREDICT/CHOOSE → INTERACT → SEE RESULT → UNDERSTAND → TRY AGAIN
 
-A hint should reveal the next useful step, not simply give the answer.
+Start with a very simple example that makes the concept discoverable. Guide the learner
+one small step at a time, then gradually remove the guidance and let them apply the idea
+independently.
 
+For procedural concepts, never start with "solve this." Build the first example together:
+show the current state, ask what to do next, let the learner perform it, then show the
+BEFORE → ACTION → AFTER result and briefly explain why.
+
+The screen should primarily be an interactive workspace, not a document.
+
+At any moment the learner should know:
+- what they are trying to discover,
+- what they can interact with,
+- what changed because of their action,
+- and what that change tells them.
+
+Do not consider an activity educational merely because it has buttons, a quiz, hints,
+or feedback. If all interaction were removed, the remaining content should NOT already
+contain the lesson's complete explanation.
+
+Hints should reveal the next useful observation or action, not dump the answer.
+
+After the learner discovers the concept through a guided example, give them a new example
+with less scaffolding so they demonstrate that they actually learned it.
 IMPORTANT: An activity is not considered educational merely because it has buttons,
 feedback, hints, or a final answer. The sequence of interactions itself must help a
 beginner discover and understand the concept.
@@ -200,7 +231,11 @@ Fix only what's broken and return the corrected activity in full.`
 
   const modelId = opts?.model ?? CODEGEN_MODEL;
   const { object } = await traceGeneration(
-    { name: "generate-activity", model: modelId, input: { system: SYSTEM_PROMPT, prompt: userContent } },
+    {
+      name: "generate-activity",
+      model: modelId,
+      input: { system: SYSTEM_PROMPT, prompt: userContent },
+    },
     () =>
       generateObject({
         model: codegenModel(modelId),
@@ -226,7 +261,9 @@ Fix only what's broken and return the corrected activity in full.`
   // to compile since the fence markers are literal text baked into what's supposed to be TSX
   // source. stripMarkdownFence (below) can't catch this — it only strips a fence around the
   // ENTIRE response text, before JSON.parse ever runs, not inside one already-parsed field.
-  const codeFenceMatch = object.code.match(/^```(?:tsx?|jsx?)?\s*\n([\s\S]*?)\n```\s*$/);
+  const codeFenceMatch = object.code.match(
+    /^```(?:tsx?|jsx?)?\s*\n([\s\S]*?)\n```\s*$/,
+  );
   if (codeFenceMatch) {
     return { ...object, code: codeFenceMatch[1] };
   }
@@ -238,7 +275,11 @@ Fix only what's broken and return the corrected activity in full.`
 // output but wraps it in a ```json ... ``` fence despite the schema/JSON-mode instruction —
 // a common failure mode for free models without first-class structured-output support. Rather
 // than avoid an otherwise-good model for this, strip the fence and let the SDK re-parse.
-function stripMarkdownFence({ text }: { text: string }): Promise<string | null> {
+function stripMarkdownFence({
+  text,
+}: {
+  text: string;
+}): Promise<string | null> {
   const match = text.match(/^```(?:json)?\s*\n([\s\S]*?)\n```\s*$/);
   return Promise.resolve(match ? match[1] : null);
 }
