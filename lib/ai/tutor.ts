@@ -76,7 +76,9 @@ export function computeProgressSummary(events: ActivityEvent[]): string {
 
 function buildSystemPrompt(activity: Activity, progressSummary: string): string {
   const actionsList = activity.actions.length
-    ? activity.actions.map((a) => `- ${a.name}: ${a.description}`).join("\n")
+    ? activity.actions
+        .map((a) => `- ${a.name}: ${a.description ?? "(no description provided)"}`)
+        .join("\n")
     : "(this activity registered no actions — you can only discuss it, not act on it)";
 
   return `${SYSTEM_PROMPT_HEADER}
@@ -135,7 +137,10 @@ export async function getTutorReply(params: {
   const tools = Object.fromEntries(
     activity.actions.map((action) => [
       action.name,
-      tool({ description: action.description, inputSchema: buildActionInputSchema(action.args) }),
+      tool({
+        description: action.description ?? `Invokes the "${action.name}" action on this activity.`,
+        inputSchema: buildActionInputSchema(action.args),
+      }),
     ]),
   );
 

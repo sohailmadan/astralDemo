@@ -16,7 +16,10 @@ export interface ActivityActionArg {
 
 export interface ActivityAction {
   name: string;
-  description: string;
+  // Optional: a real model has been observed omitting this entirely, even though the schema
+  // asks for it — see lib/ai/generateActivity.ts for why this stays optional rather than
+  // failing the whole generation over one missing string.
+  description?: string;
   // Optional for backward compatibility with rows generated before this field existed —
   // treat a missing value the same as an empty array (a zero-argument action).
   args?: ActivityActionArg[];

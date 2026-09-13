@@ -21,8 +21,16 @@ export const ActivityGenerationSchema = z.object({
           .describe(
             "Identifier passed to registerAction() in the generated code.",
           ),
+        // Optional, same reasoning as args below: found directly in production, a response
+        // whose JSON was completely valid (parsed fine) still failed schema validation because
+        // this field was missing entirely on every declared action — while args' OWN
+        // description was already optional, this is the action's own top-level description,
+        // a separate field, still required until this change. Falls back to a generic
+        // "no description provided" note in lib/ai/tutor.ts's tool-building rather than losing
+        // the whole generation over one omitted string.
         description: z
           .string()
+          .optional()
           .describe(
             "What this action does, in plain language — used to build the tutor's tools.",
           ),

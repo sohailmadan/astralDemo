@@ -1,6 +1,33 @@
 import { describe, expect, it } from "bun:test";
 
-import { escapeRawControlCharsInStrings, inferMissingActionArgs } from "./generateActivity";
+import {
+  ActivityGenerationSchema,
+  escapeRawControlCharsInStrings,
+  inferMissingActionArgs,
+} from "./generateActivity";
+
+describe("ActivityGenerationSchema", () => {
+  // Regression test: found directly in production — a response whose JSON was completely
+  // valid (parsed fine) still failed schema validation because every action was missing its
+  // own top-level `description` entirely, a field that was required until this fix. This is
+  // the real payload shape observed, not a synthetic simplification.
+  it("accepts an action with no description (the exact real-world failure)", () => {
+    const result = ActivityGenerationSchema.safeParse({
+      title: "Equivalent Fractions",
+      code: "export default function Activity() { return null; }",
+      actions: [
+        { name: "provide_hint", args: [{ name: "hint", type: "string" }] },
+        { name: "reset", args: [] },
+      ],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("still requires title and code", () => {
+    const result = ActivityGenerationSchema.safeParse({ actions: [] });
+    expect(result.success).toBe(false);
+  });
+});
 
 describe("inferMissingActionArgs", () => {
   it("leaves an action with already-declared args untouched", () => {
