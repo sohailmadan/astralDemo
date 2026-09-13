@@ -76,6 +76,15 @@ CONTRACT — the generated code must follow this exactly:
    - Include a visible, clearly-labeled way to ask for help (e.g. a "Need a hint?" button)
      that calls bridge.emitEvent("hint_requested", ...) — the tutor is what actually helps,
      this is the on-ramp to it, not a dead end.
+   - If a button performs an action rather than just submitting/checking (e.g. a step in a
+     multi-step process like "subtract 6 from both sides"), its effect must be understandable
+     BEFORE clicking, not discoverable only by clicking it. Precede a set of action buttons with
+     a short line explaining what they do (e.g. "Tap a step to apply it, in order:") so they
+     never read as a passive list of instructions or hints — the button text should describe an
+     action the learner takes, not narrate a fact. If a step is order-dependent or can only
+     usefully be done once, disable it once it no longer applies (e.g. \`disabled\`, a muted
+     color) and say so in its own label, rather than leaving a dead or re-clickable button with
+     no visual difference from one that still does something.
 
 6. Keep it focused: one activity, one concept, doing it well. Do not try to cover everything
    related to the topic.
