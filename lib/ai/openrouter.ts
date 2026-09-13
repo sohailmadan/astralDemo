@@ -60,12 +60,14 @@ const OLLAMA_TUTOR_MODEL = process.env.OLLAMA_TUTOR_MODEL ?? "llama3.2:3b";
 // live on this account's /v1/models, but every real call failed with "does not exist or you do
 // not have access to it," a real access-tier restriction distinct from the model merely being
 // listed in the catalog (Codex-branded models are often gated to the Responses API or a
-// different access tier than standard chat completions). Confirmed gpt-5-mini,
-// gpt-4.1-mini, and gpt-4o-mini are all genuinely callable on this account; gpt-5-mini is the
-// newest of those and used as the actual default.
+// different access tier than standard chat completions). Confirmed gpt-5-mini, gpt-4.1-mini,
+// and gpt-4o-mini are all genuinely callable on this account. gpt-5-mini was tried next but
+// explicitly ruled out on cost — the gpt-5 family prices meaningfully higher per token than
+// the gpt-4 family for what is, for this app's purposes, comparable code-generation quality.
+// gpt-4.1-mini is the actual default: a real, cheaper mini model, not the newest available one.
 const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const USE_OPENAI_CODEGEN = process.env.USE_OPENAI_CODEGEN === "true";
-const OPENAI_CODEGEN_MODEL = process.env.OPENAI_CODEGEN_MODEL ?? "gpt-5-mini";
+const OPENAI_CODEGEN_MODEL = process.env.OPENAI_CODEGEN_MODEL ?? "gpt-4.1-mini";
 
 // Verified live on OpenRouter's /api/v1/models as of this writing — both originally planned
 // models (openai/gpt-oss-120b:free, openai/gpt-oss-20b:free) were discontinued from the free
