@@ -45,6 +45,22 @@ const USE_LOCAL_OLLAMA = process.env.USE_LOCAL_OLLAMA === "true";
 const OLLAMA_CODEGEN_MODEL = process.env.OLLAMA_CODEGEN_MODEL ?? "qwen2.5-coder:3b";
 const OLLAMA_TUTOR_MODEL = process.env.OLLAMA_TUTOR_MODEL ?? "llama3.2:3b";
 
+// A second, real-cost dev escalation for codegen specifically — added after qwen2.5-coder:3b
+// (2B-class, local) proved unreliable at the SDK's actual contract, not just syntax: it
+// generated activities that compiled and ran fine but never called bridge.registerAction() at
+// all, despite listing action names in its response — the tutor could observe state but never
+// actually act on the activity, the exact capability the brief calls "the most important
+// part." A 3B-class model, local or free-tier, is genuinely too small to reliably follow a
+// multi-part structural contract like this one. gpt-5.1-codex-mini (OpenAI's current
+// code-specialized small model, confirmed live on this account's /v1/models) is a real,
+// paid-per-token API call — this is NOT a production model choice, it's a local-only
+// escalation for when a free/local model's failures are genuinely about capability rather than
+// something a better prompt or a repair-loop retry can fix. Off by default; requires both
+// USE_OPENAI_CODEGEN=true and a real OPENAI_API_KEY.
+const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const USE_OPENAI_CODEGEN = process.env.USE_OPENAI_CODEGEN === "true";
+const OPENAI_CODEGEN_MODEL = process.env.OPENAI_CODEGEN_MODEL ?? "gpt-5.1-codex-mini";
+
 // Verified live on OpenRouter's /api/v1/models as of this writing — both originally planned
 // models (openai/gpt-oss-120b:free, openai/gpt-oss-20b:free) were discontinued from the free
 // tier between planning and implementation, exactly the risk CLAUDE.md calls out. Re-check
@@ -93,6 +109,7 @@ export const TUTOR_MODEL = "liquid/lfm-2.5-2.6b:free";
 export const TUTOR_FALLBACK_MODEL = "nvidia/nemotron-3-super-120b-a12b:free";
 
 export function codegenModel(modelId: string = CODEGEN_MODEL) {
+  if (USE_OPENAI_CODEGEN) return openai(OPENAI_CODEGEN_MODEL);
   if (USE_LOCAL_OLLAMA) return ollama(OLLAMA_CODEGEN_MODEL);
   return openrouter(modelId);
 }
@@ -110,6 +127,7 @@ export function tutorModel(modelId: string = TUTOR_MODEL) {
  * local models.
  */
 export function effectiveModelId(requestedModelId: string, role: "codegen" | "tutor"): string {
+  if (role === "codegen" && USE_OPENAI_CODEGEN) return `openai:${OPENAI_CODEGEN_MODEL}`;
   if (!USE_LOCAL_OLLAMA) return requestedModelId;
   return `ollama:${role === "codegen" ? OLLAMA_CODEGEN_MODEL : OLLAMA_TUTOR_MODEL}`;
 }
