@@ -1,3 +1,4 @@
+import { NoObjectGeneratedError } from "ai";
 import { after } from "next/server";
 import { NextResponse } from "next/server";
 
@@ -115,8 +116,18 @@ async function runGenerationPipeline(activityId: string, prompt: string) {
       // against the original prompt rather than repairing something that doesn't exist.
       lastFailure = err instanceof Error ? err.message : String(err);
       priorAttempt = undefined;
-      attemptHistory.push({ attempt: attemptNumber, code: null, error: lastFailure });
-      console.error(`[generate] activity ${activityId} attempt ${attemptNumber}/${MAX_REPAIR_ATTEMPTS + 1} errored: ${lastFailure}`);
+
+      // NoObjectGeneratedError.text carries the model's actual raw output, which the generic
+      // .message doesn't — without this, a schema-validation or unparseable-JSON failure was
+      // undiagnosable after the fact: "response did not match schema" says nothing about WHAT
+      // was wrong with it. Found the hard way: two consecutive real failures on this exact
+      // error, and no way to tell (without adding this) whether the model's output was subtly
+      // malformed JSON, missing a required field, or something else entirely.
+      const rawOutput = NoObjectGeneratedError.isInstance(err) ? err.text : undefined;
+      const loggedFailure = rawOutput ? `${lastFailure}\n--- raw model output ---\n${rawOutput}` : lastFailure;
+
+      attemptHistory.push({ attempt: attemptNumber, code: null, error: loggedFailure });
+      console.error(`[generate] activity ${activityId} attempt ${attemptNumber}/${MAX_REPAIR_ATTEMPTS + 1} errored: ${loggedFailure}`);
     }
 
     // Persisted after every attempt, not just at the end — if the process is killed mid-loop
