@@ -202,8 +202,19 @@ CONTRACT — the generated code must follow this exactly:
 6. Keep it focused: one activity, one concept, doing it well. Do not try to cover everything
    related to the topic.
 
-Return JSON matching the schema: a short title, the full code, and the list of actions you
-registered (name + plain-language description of what each does).`;
+OUTPUT FORMAT — read this carefully, it is a common source of failure:
+
+Return a single JSON object matching the schema exactly: \`title\` (string), \`code\` (string —
+the full TSX source), \`actions\` (array). Nothing else — no prose before or after the JSON, no
+markdown code fence around it.
+
+The \`code\` field is a JSON STRING containing your TSX source, not literal TSX. Every line break
+inside it MUST be the two-character escape sequence \\n — never a real, literal newline
+character. The same applies to any literal tab or double-quote character inside that string.
+This matters most at the edges of JS template literals (backtick strings with \${...}
+interpolation) inside your generated code — that is exactly where a literal newline is most
+likely to slip in by mistake instead of the escaped \\n, which breaks the JSON itself even when
+the TSX source you intended is completely correct.`;
 
 interface PriorAttempt {
   code: string;
@@ -251,7 +262,7 @@ Fix only what's broken and return the corrected activity in full.`
         // (`bun run start`, no wall-clock kill) while verifying the pipeline can actually
         // succeed at all; it is not the production-ready number. See CLAUDE.md "Reliability."
         abortSignal: AbortSignal.timeout(600_000),
-        repairText: stripMarkdownFence,
+        repairText: repairModelJson,
       }),
   );
 
@@ -335,15 +346,63 @@ function escapeRegExp(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-// Also observed directly in testing: cohere/north-mini-code:free otherwise produces good
-// output but wraps it in a ```json ... ``` fence despite the schema/JSON-mode instruction —
-// a common failure mode for free models without first-class structured-output support. Rather
-// than avoid an otherwise-good model for this, strip the fence and let the SDK re-parse.
-function stripMarkdownFence({
-  text,
-}: {
-  text: string;
-}): Promise<string | null> {
-  const match = text.match(/^```(?:json)?\s*\n([\s\S]*?)\n```\s*$/);
-  return Promise.resolve(match ? match[1] : null);
+// Combines two independent repairs for the AI SDK's `repairText` hook (see generateObject
+// call above), tried in sequence, either of which may be a no-op on any given response:
+//
+// 1. Also observed directly in testing: cohere/north-mini-code:free otherwise produces good
+//    output but wraps it in a ```json ... ``` fence despite the schema/JSON-mode instruction —
+//    a common failure mode for free models without first-class structured-output support.
+//
+// 2. Found directly in production ("could not parse the response" on a `code` field
+//    containing genuinely good source): the model can emit a literal, raw newline character
+//    instead of the escaped \n it used correctly everywhere else in the same string — observed
+//    at a JS template-literal interpolation boundary inside the generated code
+//    (`` `...${ `` followed by an actual line break rather than `\n`). JSON forbids raw control
+//    characters inside a string; one such slip breaks parsing of an otherwise well-formed
+//    response. escapeRawControlCharsInStrings walks the text tracking whether it's inside a
+//    string literal and re-escapes any raw newline/tab/carriage-return found there.
+//
+// Rather than avoid an otherwise-good model for either issue, repair the text and let the SDK
+// re-parse — returns null (no repair) only if neither transform changed anything.
+function repairModelJson({ text }: { text: string }): Promise<string | null> {
+  const fenceMatch = text.match(/^```(?:json)?\s*\n([\s\S]*?)\n```\s*$/);
+  const unfenced = fenceMatch ? fenceMatch[1] : text;
+
+  const repaired = escapeRawControlCharsInStrings(unfenced);
+  return Promise.resolve(repaired === text ? null : repaired);
+}
+
+/** Exported for testing. See repairModelJson above for why this exists. */
+export function escapeRawControlCharsInStrings(input: string): string {
+  let result = "";
+  let inString = false;
+  let escaped = false;
+
+  for (const ch of input) {
+    if (inString) {
+      if (escaped) {
+        result += ch;
+        escaped = false;
+      } else if (ch === "\\") {
+        result += ch;
+        escaped = true;
+      } else if (ch === '"') {
+        inString = false;
+        result += ch;
+      } else if (ch === "\n") {
+        result += "\\n";
+      } else if (ch === "\r") {
+        result += "\\r";
+      } else if (ch === "\t") {
+        result += "\\t";
+      } else {
+        result += ch;
+      }
+    } else {
+      if (ch === '"') inString = true;
+      result += ch;
+    }
+  }
+
+  return result;
 }
