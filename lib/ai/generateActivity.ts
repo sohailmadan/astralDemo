@@ -63,6 +63,10 @@ CONTRACT — the generated code must follow this exactly:
    text-slate-900, border-slate-200) — NEVER semantic aliases like bg-primary or text-foreground,
    which don't resolve inside this sandbox. Use relative/flex/grid layout, not fixed pixel
    widths — this must look correct on a narrow phone screen, not just desktop.
+   When multiple buttons are stacked vertically (e.g. Submit, hint, reset), give them all the
+   same width (e.g. \`w-full\` inside a \`flex flex-col\` container) and consistent spacing via a
+   single \`gap-*\` on the container — never mix per-button margins, which produces a ragged,
+   inconsistent-width stack.
 
 5. Non-negotiable UX, regardless of what the activity is:
    - If there's something to check/submit, include a clear, obvious submit/check action —
