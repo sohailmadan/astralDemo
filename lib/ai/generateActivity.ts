@@ -79,12 +79,15 @@ CONTRACT — the generated code must follow this exactly:
    - If a button performs an action rather than just submitting/checking (e.g. a step in a
      multi-step process like "subtract 6 from both sides"), its effect must be understandable
      BEFORE clicking, not discoverable only by clicking it. Precede a set of action buttons with
-     a short line explaining what they do (e.g. "Tap a step to apply it, in order:") so they
-     never read as a passive list of instructions or hints — the button text should describe an
-     action the learner takes, not narrate a fact. If a step is order-dependent or can only
-     usefully be done once, disable it once it no longer applies (e.g. \`disabled\`, a muted
-     color) and say so in its own label, rather than leaving a dead or re-clickable button with
-     no visual difference from one that still does something.
+     a short line explaining what they do (e.g. "Do these steps in order:") so they never read
+     as a passive list of instructions or hints — the button text should describe an action the
+     learner takes, not narrate a fact.
+   - Ordered/sequential steps (do X, then Y, then Z) must use three visually distinct states,
+     not just enabled/disabled: DONE (muted color, a checkmark, past-tense label — e.g. a light
+     gray "✓ Step 1: Subtracted 6"), the one CURRENTLY ACTIONABLE step (strongly highlighted —
+     e.g. a ring/border plus its normal color — so it is unmistakable which one to do next, not
+     merely "not grayed out"), and steps not yet reachable (visibly muted, disabled, no special
+     label). Never leave more than one step looking equally actionable at the same time.
    - When a step transforms a value shown on screen, show what happened to EVERY part it
      affected, not just whichever part changed most visibly. E.g. dividing an equation by a
      number changes both a coefficient (which may just disappear, e.g. "2x" -> "x") and a
