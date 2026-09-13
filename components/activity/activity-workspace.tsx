@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef } from "react";
+import { useCallback, useRef, useState } from "react";
 
 import { ActivityFrame, type ActivityFrameHandle } from "@/components/activity/activity-frame";
 import { ActivityErrorBoundary } from "@/components/activity/error-boundary";
@@ -27,6 +27,12 @@ export function ActivityWorkspace({
 }) {
   const frameRef = useRef<ActivityFrameHandle>(null);
   const tutorRef = useRef<TutorChatHandle>(null);
+  // Bumping this remounts ActivityFrame (via its `key` below) — a full iframe reload, which
+  // re-executes the activity's bundled JS from scratch and genuinely resets every useState to
+  // its initial value. Chosen over calling a "reset"-shaped registered action because there's
+  // no guaranteed name for one across activities (reset, new_problem, reset_problem all appear
+  // in practice) — a remount works identically for every activity, no naming assumption needed.
+  const [frameKey, setFrameKey] = useState(0);
 
   const handleAction = useCallback(
     (name: string, args: Record<string, unknown>) => {
@@ -42,11 +48,19 @@ export function ActivityWorkspace({
     }
   }, []);
 
+  const handleResetProgress = useCallback(async () => {
+    const res = await fetch(`/api/activities/${activity.id}/events`, { method: "DELETE" });
+    if (res.ok) {
+      setFrameKey((k) => k + 1);
+    }
+    return res.ok;
+  }, [activity.id]);
+
   return (
     <>
       <div className="min-w-0 flex-1">
         <ActivityErrorBoundary>
-          <ActivityFrame ref={frameRef} activity={activity} onEvent={handleActivityEvent} />
+          <ActivityFrame key={frameKey} ref={frameRef} activity={activity} onEvent={handleActivityEvent} />
         </ActivityErrorBoundary>
       </div>
       {/*
@@ -64,6 +78,7 @@ export function ActivityWorkspace({
           activityId={activity.id}
           initialMessages={initialMessages}
           onActionCall={handleAction}
+          onResetProgress={handleResetProgress}
         />
       </aside>
     </>

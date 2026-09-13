@@ -26,8 +26,12 @@ export const TutorChat = forwardRef<
     activityId: string;
     initialMessages: TutorMessage[];
     onActionCall: (name: string, args: Record<string, unknown>) => Promise<{ ok: boolean; error?: string }>;
+    /** Clears activity_events/last_state AND remounts the activity iframe so it visibly reverts
+     * to its initial screen — the actual reset+remount coordination lives in
+     * activity-workspace.tsx, which is the only place that holds a ref to the iframe. */
+    onResetProgress: () => Promise<boolean>;
   }
->(function TutorChat({ activityId, initialMessages, onActionCall }, ref) {
+>(function TutorChat({ activityId, initialMessages, onActionCall, onResetProgress }, ref) {
   const [messages, setMessages] = useState<ChatMessage[]>(() => initialMessages.map(toChatMessage));
   const [input, setInput] = useState("");
   const [isSending, setIsSending] = useState(false);
@@ -46,17 +50,17 @@ export const TutorChat = forwardRef<
     }
   }
 
-  // Distinct from "Clear chat": this clears what the tutor knows about the learner's progress
-  // (activity_events + last_state), not the conversation itself. Does not touch what's
-  // currently rendered inside the activity — the learner may also want to use the activity's
-  // own reset action to match, called out in the confirmation so it isn't assumed automatic.
+  // Distinct from "Clear chat": this resets the activity itself back to its initial screen AND
+  // clears what the tutor knows about progress (activity_events + last_state) — not the
+  // conversation, which "Clear chat" handles separately. The actual reset+remount happens in
+  // activity-workspace.tsx (onResetProgress), since only it holds a ref to the iframe.
   async function handleResetProgress() {
-    if (!confirm("Reset the tutor's memory of your progress on this activity? This won't undo the chat, and won't reset the activity itself if it's mid-problem.")) {
+    if (!confirm("Reset this activity back to its starting screen? The tutor will also forget your progress on it. This won't clear the chat conversation.")) {
       return;
     }
     setIsResetting(true);
     try {
-      await fetch(`/api/activities/${activityId}/events`, { method: "DELETE" });
+      await onResetProgress();
     } finally {
       setIsResetting(false);
     }
@@ -130,7 +134,7 @@ export const TutorChat = forwardRef<
           <button
             onClick={handleResetProgress}
             disabled={isResetting}
-            title="Clears what the tutor knows about your progress on this activity (not the activity itself)."
+            title="Resets the activity to its starting screen and clears what the tutor knows about your progress."
             className="text-xs text-muted-foreground underline-offset-2 hover:underline disabled:opacity-50"
           >
             Reset progress
