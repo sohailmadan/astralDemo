@@ -12,7 +12,16 @@ const nextConfig: NextConfig = {
   // (README.md) that Turbopack chokes on trying to bundle for the server. It's server-only,
   // Node-native code anyway — tell Next to require() it directly at runtime instead of
   // bundling it, which is what this option exists for.
-  serverExternalPackages: ["esbuild"],
+  //
+  // tailwindcss/postcss (used by lib/validate/compile.ts's Tailwind step) need the same
+  // treatment for a related but distinct reason, found via a real production-build failure:
+  // Tailwind locates its own bundled preflight.css internally via `__dirname`, which Next's
+  // server bundler rewrites to a virtual path when it bundles the package — breaking that
+  // lookup with ENOENT at runtime under `next start`, even though the exact same code path
+  // worked fine calling compileActivity() directly outside Next's bundler (e.g. from a plain
+  // script, or under `next dev`'s more lenient bundling). Excluding both from bundling lets
+  // them load via real require() with their own real __dirname.
+  serverExternalPackages: ["esbuild", "tailwindcss", "postcss"],
   // Baseline security headers on the host app itself — separate from, and in addition to, the
   // sandboxed activity iframe's own CSP (see CLAUDE.md "Security considerations"). Cheap to
   // add, easy to forget.
