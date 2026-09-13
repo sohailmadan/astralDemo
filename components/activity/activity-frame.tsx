@@ -54,6 +54,23 @@ export const ActivityFrame = forwardRef<ActivityFrameHandle, ActivityFrameProps>
       resolve: (result: { ok: boolean; error?: string }) => void;
     } | null>(null);
 
+    // Found directly via a real, reproducible bug: this page is server-rendered (not
+    // statically prerendered, but SSR'd on every request), which bakes the iframe's `srcDoc`
+    // straight into the initial HTML. The browser starts executing that iframe's content the
+    // instant it parses that HTML — BEFORE React's own JS bundle has loaded or hydrated. When
+    // hydration then runs and (re)creates this iframe element client-side, the ORIGINAL
+    // server-parsed instance's execution context is torn down mid-flight — after its
+    // synchronous top-level code (the entry script's immediate ResizeObserver + first
+    // reportHeight() call) had already fired a RESIZE message, but BEFORE its React effects
+    // (which run asynchronously, including useTutorBridge()'s own effect that posts READY) got
+    // a chance to complete. Confirmed directly: RESIZE reliably arrived, READY never did, on an
+    // activity whose exact same compiled bundle sent both correctly in an isolated non-SSR'd
+    // iframe test. Gating the iframe behind a mounted-only render means it is NEVER part of
+    // SSR output at all — created exactly once, client-side, after hydration has already
+    // settled, with nothing to interrupt its single execution.
+    const [mounted, setMounted] = useState(false);
+    useEffect(() => setMounted(true), []);
+
     const srcDoc =
       activity.compiled_js && activity.compiled_css !== null
         ? buildActivityIframeHtml(activity.compiled_js, activity.compiled_css ?? "")
@@ -75,7 +92,7 @@ export const ActivityFrame = forwardRef<ActivityFrameHandle, ActivityFrameProps>
     }));
 
     useEffect(() => {
-      if (!srcDoc) return;
+      if (!mounted || !srcDoc) return;
 
       const timeout = setTimeout(() => setStatus((s) => (s === "loading" ? "hung" : s)), READY_TIMEOUT_MS);
 
@@ -128,12 +145,24 @@ export const ActivityFrame = forwardRef<ActivityFrameHandle, ActivityFrameProps>
         window.removeEventListener("message", handleMessage);
         clearTimeout(timeout);
       };
-    }, [srcDoc, activity.id, onEvent]);
+    }, [mounted, srcDoc, activity.id, onEvent]);
 
     if (!srcDoc) {
       return (
         <div className="flex min-h-64 items-center justify-center rounded-lg border border-border bg-card p-6 text-center">
           <p className="text-sm text-muted-foreground">This activity has no compiled output.</p>
+        </div>
+      );
+    }
+
+    // Only `mounted` gates this — NOT `status`. The iframe must actually be present and
+    // executing while status is still "loading" in order to ever send READY at all; hiding it
+    // until status flips away from "loading" would make that flip impossible (a real bug
+    // caught while fixing this).
+    if (!mounted) {
+      return (
+        <div className="flex min-h-64 items-center justify-center rounded-lg border border-border bg-card p-6 text-center">
+          <p className="text-sm text-muted-foreground">Loading activity…</p>
         </div>
       );
     }
