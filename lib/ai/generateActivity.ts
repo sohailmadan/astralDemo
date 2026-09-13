@@ -88,7 +88,15 @@ CONTRACT — the generated code must follow this exactly:
 3. Call \`const bridge = useTutorBridge()\` and use it to stay connected to the tutor:
    - \`bridge.publishState(state)\` — call this whenever the activity's meaningful state
      changes (state is a plain object, whatever shape makes sense for THIS activity — do not
-     force in fields like "attempts" or "correct" if they don't naturally apply).
+     force in fields like "attempts" or "correct" if they don't naturally apply). This is the
+     ONLY way the tutor sees what's happening — it cannot see the rendered screen. Always
+     include: (a) the specific value/question currently being asked, in a form that doesn't
+     require re-deriving it (e.g. "How many times does 12 go into 43?", not just a step index —
+     a step index alone forces the tutor to redo your whole computation itself to know what's
+     actually being asked, which it will get wrong), (b) whatever the learner has currently
+     typed/selected/positioned, even before they submit it, and (c) the most recent feedback or
+     correctness result the activity itself displayed. Without (b) and (c), the tutor can only
+     ever discuss the step number, not what the learner is actually stuck on or already tried.
    - \`bridge.emitEvent(type, payload?)\` — call this for discrete things the learner does
      (e.g. "answer_submitted", "hint_requested", "point_moved", "step_completed"). Emit an
      event for every meaningful learner action, not just some of them — this is how the tutor
