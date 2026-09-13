@@ -11,6 +11,12 @@ export interface ActivityAction {
   description: string;
 }
 
+export interface AttemptRecord {
+  attempt: number;
+  code: string | null;
+  error: string | null;
+}
+
 export interface Activity {
   id: string;
   prompt: string;
@@ -23,6 +29,7 @@ export interface Activity {
   generation_attempt: number;
   last_state: Record<string, unknown> | null;
   error: string | null;
+  attempt_history: AttemptRecord[];
   created_at: string;
   updated_at: string;
 }

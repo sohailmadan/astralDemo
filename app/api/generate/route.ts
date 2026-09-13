@@ -3,8 +3,9 @@ import { NextResponse } from "next/server";
 
 import { generateActivityCode } from "@/lib/ai/generateActivity";
 import { MAX_REPAIR_ATTEMPTS } from "@/lib/generation-constants";
-import { compileActivity, type CompileError } from "@/lib/validate/compile";
 import { createServiceClient } from "@/lib/supabase/service";
+import type { AttemptRecord } from "@/lib/types";
+import { compileActivity, type CompileError } from "@/lib/validate/compile";
 
 // Vercel's actual serverless ceiling (even Pro + Fluid Compute) sits well under what 3
 // attempts at generateActivity.ts's current 10-minute-per-call timeout could take (worst case
@@ -49,13 +50,15 @@ async function runGenerationPipeline(activityId: string, prompt: string) {
   const supabase = createServiceClient();
   let priorAttempt: { code: string; error: string } | undefined;
   let lastFailure = "Generation failed for an unknown reason.";
+  const attemptHistory: AttemptRecord[] = [];
 
   for (let attempt = 0; attempt <= MAX_REPAIR_ATTEMPTS; attempt++) {
+    const attemptNumber = attempt + 1;
     // 1-indexed for display ("attempt 1 of 3", not "0 of 3") — written before the (slow) AI
     // call so the UI can show which attempt is in flight, not just "generating" undifferentiated.
     await supabase
       .from("activities")
-      .update({ generation_attempt: attempt + 1 })
+      .update({ generation_attempt: attemptNumber })
       .eq("id", activityId);
 
     try {
@@ -63,6 +66,7 @@ async function runGenerationPipeline(activityId: string, prompt: string) {
       const compiled = await compileActivity(generation.code);
 
       if (compiled.ok) {
+        attemptHistory.push({ attempt: attemptNumber, code: generation.code, error: null });
         await supabase
           .from("activities")
           .update({
@@ -72,6 +76,7 @@ async function runGenerationPipeline(activityId: string, prompt: string) {
             compiled_js: compiled.code,
             compiled_css: compiled.css,
             actions: generation.actions,
+            attempt_history: attemptHistory,
           })
           .eq("id", activityId);
         return;
@@ -79,13 +84,29 @@ async function runGenerationPipeline(activityId: string, prompt: string) {
 
       lastFailure = formatCompileErrors(compiled.errors);
       priorAttempt = { code: generation.code, error: lastFailure };
+      attemptHistory.push({ attempt: attemptNumber, code: generation.code, error: lastFailure });
+      // Visible in server stdout (and Vercel's function logs in production) the moment this
+      // happens — the DB record (attempt_history below) is for structured querying later, this
+      // is for noticing it right now without going to look. This is exactly the evidence
+      // needed to tell "the model produced genuinely bad code" apart from "the prompt needs
+      // work" apart from "this model just isn't reliable enough" — see CLAUDE.md "Reliability".
+      console.error(
+        `[generate] activity ${activityId} attempt ${attemptNumber}/${MAX_REPAIR_ATTEMPTS + 1} failed to compile:\n${lastFailure}\n--- generated code ---\n${generation.code}`,
+      );
     } catch (err) {
       // A generation-call-level failure (timeout, malformed JSON the repair hook couldn't fix)
       // has no `code` to hand back as a prior attempt — next loop iteration retries fresh
       // against the original prompt rather than repairing something that doesn't exist.
       lastFailure = err instanceof Error ? err.message : String(err);
       priorAttempt = undefined;
+      attemptHistory.push({ attempt: attemptNumber, code: null, error: lastFailure });
+      console.error(`[generate] activity ${activityId} attempt ${attemptNumber}/${MAX_REPAIR_ATTEMPTS + 1} errored: ${lastFailure}`);
     }
+
+    // Persisted after every attempt, not just at the end — if the process is killed mid-loop
+    // (see CLAUDE.md's after() limitation), whatever attempts already ran stay inspectable
+    // instead of vanishing along with the rest of the run.
+    await supabase.from("activities").update({ attempt_history: attemptHistory }).eq("id", activityId);
   }
 
   await supabase

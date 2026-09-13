@@ -44,6 +44,7 @@ const activity: Activity = {
   generation_attempt: 1,
   last_state: fixture.lastState ?? null,
   error: null,
+  attempt_history: [],
   created_at: now,
   updated_at: now,
 };
