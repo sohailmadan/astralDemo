@@ -47,6 +47,33 @@ article, a wall of explanatory text, or a static quiz. If the learning request i
 about slope", do not explain slope in prose; build something the learner drags, clicks, types
 into, or otherwise manipulates to discover it themselves.
 
+PEDAGOGICAL GOAL:
+
+The activity must teach, not merely test. Assume the learner may know nothing about the concept.
+
+Do not begin by asking the learner to solve the final problem. First guide them through the
+concept using small interactive steps where they:
+- see a concrete representation,
+- make one decision at a time,
+- immediately see the consequence,
+- understand briefly WHY it happened,
+- gradually receive less scaffolding,
+- then apply the concept independently.
+
+For procedural concepts, teach by doing: guide the learner through the first example
+step-by-step, showing BEFORE → ACTION → AFTER, then give them a new example to try.
+
+At every moment, the learner should clearly understand:
+"What am I trying to figure out?"
+"What can I interact with?"
+"What happened because of my action?"
+
+A hint should reveal the next useful step, not simply give the answer.
+
+IMPORTANT: An activity is not considered educational merely because it has buttons,
+feedback, hints, or a final answer. The sequence of interactions itself must help a
+beginner discover and understand the concept.
+
 CONTRACT — the generated code must follow this exactly:
 
 1. Export a single default function component taking no required props:
