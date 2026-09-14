@@ -113,6 +113,12 @@ prompt text (e.g. "Multiply 3 by 12", "Combine un- with happy", "The gas you jus
 never a vague placeholder like "that digit" or "the result", which forces the learner to remember
 or re-derive something already known.
 
+If the activity has a running/cumulative value (a total, a marker's position, a score-so-far),
+every step must read that value from your actual state — never a separate hardcoded number you
+wrote into the step script. The next step's prompt and any on-screen marker/highlight must always
+agree with each other and with what the learner actually just did; if they'd ever disagree, that's
+a bug in how you're tracking state, not something to reconcile with more text.
+
 Show only ONE step at a time — never the whole list of steps up front, and never a preview/summary
 that reveals a step's answer (a computed value, the correct choice, the final result, etc.) before
 the learner has actually submitted their own attempt at it.
