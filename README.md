@@ -7,10 +7,13 @@ tutor that can see and act on the activity's live state.
 Built for a take-home challenge. See `CLAUDE.md` for the detailed architecture/reliability
 record kept up to date as the project progressed.
 
-**Status**: Milestones 1–3 (app skeleton, generation pipeline, AI tutor) complete and working
-locally. Milestone 4 (polish) in progress. **Not deployed to production yet** — verified via
-`bun run dev`/`bun run start` only. Sample Langfuse trace + access grant to
-shivam@astraltutor.com also not yet done.
+**Status**: Milestones 1–3 (app skeleton, generation pipeline, AI tutor) complete and working.
+Milestone 4 (polish) in progress. **Deployed to Vercel + Supabase production**:
+https://astral-challenge-lilac.vercel.app — verified end-to-end there (a real generation
+request, compiled and rendered, with a working tutor chat), not just a successful build. On the
+Hobby plan, so `/api/generate`'s `maxDuration` is capped at 300s (see "Tradeoffs" below) rather
+than the 800s a Pro plan would allow. Sample Langfuse trace + access grant to
+shivam@astraltutor.com not yet done.
 
 ## Architecture
 
@@ -119,10 +122,17 @@ shivam@astraltutor.com.
   compliance, likely by diluting attention. Kept only rules verified to matter and generalize.
 - **Paid OpenAI models over free OpenRouter, by default** — a deliberate reversal after live
   testing showed free models' failure rate too high to build against reliably.
+- **`maxDuration = 300`, not the 800 a Pro plan allows** — the real Hobby-plan ceiling
+  (confirmed by a rejected deploy, not guessed). Slightly under the pipeline's own theoretical
+  6-minute worst case if every attempt needs a repair; the typical case (tens of seconds) is
+  comfortably under it. Three deploy-only bugs surfaced fixing this (see the commit that added
+  this line): esbuild couldn't resolve react/react-dom/scheduler at runtime because Next's
+  file-tracing can't see a resolution that happens inside a template string, and
+  `NEXT_PUBLIC_*` vars needed to be build-time env, not just runtime — none of this was
+  reachable by "the local production build works."
 
 ## What I'd improve with more time
 
-- Deploy to Vercel + Supabase production and verify against that deployment.
 - Share a sample Langfuse trace + grant shivam@astraltutor.com access.
 - Smaller, more frequent commits — a full session's fixes accumulated uncommitted before being
   swept into a handful of larger commits.
