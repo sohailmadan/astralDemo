@@ -6,7 +6,10 @@ description: >
   Run with: bunx promptfoo eval -c evals/generation.eval.yaml --max-concurrency 3
 
 providers:
-  - "exec:bun run evals/run-generation.ts"
+  # promptfoo's exec provider runs with cwd set to this config file's own directory (evals/),
+  # not the repo root — but run-generation.ts's relative imports and compileActivity's relative
+  # sdk paths, plus .env.local, all assume repo-root cwd. `cd ..` before invoking restores that.
+  - "exec:bash -c 'cd .. && bun run evals/run-generation.ts \"$@\"' _"
 
 prompts:
   - "{{prompt}}"

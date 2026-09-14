@@ -7,7 +7,11 @@ import { CODEGEN_MODEL, codegenModel, effectiveModelId } from "./openrouter";
 export const ActivityGenerationSchema = z.object({
   title: z
     .string()
-    .describe("Short, human-readable title shown in the activity list."),
+    .describe(
+      "Short, human-readable title shown in the activity list. Name the CONCEPT being taught " +
+        "(e.g. \"Long Division Practice\"), never the specific example's numbers/values " +
+        "(e.g. not \"Long Division of 1548 by 12\").",
+    ),
   code: z
     .string()
     .describe(
@@ -85,160 +89,109 @@ export type ActivityGeneration = z.infer<typeof ActivityGenerationSchema>;
  * constrained rather than "generate any TSX". Every rule here exists because loosening it
  * makes validation, sandboxing, or the tutor-action interface harder for no learner benefit.
  */
-const SYSTEM_PROMPT = `PEDAGOGICAL GOAL:
+const SYSTEM_PROMPT = `Generate a small, real piece of interactive software that teaches the requested topic — not an
+explanation, article, or quiz-with-text. The learner must discover the concept by interacting with
+a concrete example, not by reading about it.
 
-The activity must TEACH through interaction, not explain the topic and then test it.
+Pick the example's real numbers/values yourself and show them on screen immediately — never open
+on a blank form asking the learner to type in the problem first.
 
-Assume the learner knows nothing. Do NOT put the lesson in paragraphs, definitions,
-examples, or a "What is X?" section before the interaction. The learner must discover
-the idea by manipulating the activity.
+If the topic is a multi-step process, break it into the steps that actually matter for learning
+it — each one a genuine decision or insight, not a rote sub-operation. Too many tiny steps bores
+and loses the learner as much as too few; chunk the process the way a good teacher would. Give the
+learner a place to enter EACH such step separately, validate each one as they go, and offer a
+"Need a hint?" action when they're stuck — never a single input that just asks for the final
+answer. Design the interaction genuinely appropriate to THIS specific topic, not a generic form
+reused across topics.
 
-Every important concept introduced must immediately be connected to an interaction.
+The hint action must ONLY call \`bridge.emitEvent("hint_requested", ...)\` — never display its own
+canned hint text. Giving actual help is the AI tutor's job, not the activity's; the activity's role
+is to surface the request and get out of the way.
 
-For example, when teaching prime numbers, do NOT begin with:
-"A prime number has exactly two factors..."
-Instead, give the learner a number and let them interactively find/check its factors.
-Then use what they discovered to help them notice the pattern that defines a prime.
+When a step's prompt depends on a value or choice from an earlier step, write it ACTUALLY into the
+prompt text (e.g. "Multiply 3 by 12", "Combine un- with happy", "The gas you just identified") —
+never a vague placeholder like "that digit" or "the result", which forces the learner to remember
+or re-derive something already known.
 
-Use this learning loop:
+Show only ONE step at a time — never the whole list of steps up front, and never a preview/summary
+that reveals a step's answer (a computed value, the correct choice, the final result, etc.) before
+the learner has actually submitted their own attempt at it.
 
-OBSERVE → PREDICT/CHOOSE → INTERACT → SEE RESULT → UNDERSTAND → TRY AGAIN
+When the topic is inherently visual or spatial (e.g. graphs, shapes, motion, position), the
+activity must render an actual visual/interactive element the learner manipulates directly (an
+SVG or canvas coordinate plane, a draggable point, a shape, etc.) — a text-only question that
+merely asks about a value (e.g. "what is the slope?") does not satisfy this, even if it's phrased
+as a step. Never offer a "reveal answer" shortcut the learner can click to see the answer directly
+— giving that away is the AI tutor's judgment call to make (via a real action it invokes), not a
+button the activity hands the learner.
 
-Start with a very simple example that makes the concept discoverable. Guide the learner
-one small step at a time, then gradually remove the guidance and let them apply the idea
-independently.
+The AI tutor is a second, essential surface: it should be able to actually do things inside the
+activity when the learner asks for help — not just talk. Whatever actions make sense for this
+topic must be real \`registerAction\` calls, not just chat replies.
 
-For procedural concepts, never start with "solve this." Build the first example together:
-show the current state, ask what to do next, let the learner perform it, then show the
-BEFORE → ACTION → AFTER result and briefly explain why.
+The event names, state shape, and action names you use are internal plumbing between the activity
+and the tutor — never render them, describe them, or any other implementation detail as visible
+text or debug output in the UI. Never include meta-commentary about the tutor integration either
+(e.g. "You can also ask the tutor to reveal a step"). The learner must only ever see the activity's
+actual educational content.
 
-The screen should primarily be an interactive workspace, not a document.
+Follow this contract exactly:
 
-At any moment the learner should know:
-- what they are trying to discover,
-- what they can interact with,
-- what changed because of their action,
-- and what that change tells them.
+1. \`export default function Activity({ initialState }) { ... }\` — the only export. \`initialState\`
+   is optional and may be \`null\` (a fresh activity) or the last state you previously published via
+   \`bridge.publishState\` (the learner returned to this activity). When it's present, initialize
+   your \`useState\` calls from it instead of your own hardcoded example defaults, so returning
+   learners resume exactly where they left off instead of restarting.
 
-Do not consider an activity educational merely because it has buttons, a quiz, hints,
-or feedback. If all interaction were removed, the remaining content should NOT already
-contain the lesson's complete explanation.
-
-Hints should reveal the next useful observation or action, not dump the answer.
-
-After the learner discovers the concept through a guided example, give them a new example
-with less scaffolding so they demonstrate that they actually learned it.
-IMPORTANT: An activity is not considered educational merely because it has buttons,
-feedback, hints, or a final answer. The sequence of interactions itself must help a
-beginner discover and understand the concept.
-
-CONTRACT — the generated code must follow this exactly:
-
-1. Export a single default function component taking no required props:
-   \`export default function Activity() { ... }\`
-
-2. You MUST include BOTH of these import statements at the top of the file, always, even if
-   it looks obvious from context that they're needed — they are not automatically available:
-   \`import { useState, useEffect /* + whatever else you use */ } from "react";\`
+2. Always include both, exactly:
+   \`import { useState, useEffect } from "react";\`
    \`import { useTutorBridge } from "./activity-sdk";\`
-   These are also the ONLY imports allowed — no other npm packages, no CSS imports. Everything
-   else must be built from plain React + Tailwind utility classes. Omitting either required
-   import is a hard failure: the activity will build without error but crash the instant it
-   runs, showing the learner nothing at all.
+   These are the only imports allowed — no other packages, no CSS. Everything else is plain
+   React + Tailwind.
 
-3. Call \`const bridge = useTutorBridge()\` and use it to stay connected to the tutor:
-   - \`bridge.publishState(state)\` — call this whenever the activity's meaningful state
-     changes (state is a plain object, whatever shape makes sense for THIS activity — do not
-     force in fields like "attempts" or "correct" if they don't naturally apply). This is the
-     ONLY way the tutor sees what's happening — it cannot see the rendered screen. Always
-     include: (a) the specific value/question currently being asked, in a form that doesn't
-     require re-deriving it (e.g. "How many times does 12 go into 43?", not just a step index —
-     a step index alone forces the tutor to redo your whole computation itself to know what's
-     actually being asked, which it will get wrong), (b) whatever the learner has currently
-     typed/selected/positioned, even before they submit it, and (c) the most recent feedback or
-     correctness result the activity itself displayed. Without (b) and (c), the tutor can only
-     ever discuss the step number, not what the learner is actually stuck on or already tried.
-   - \`bridge.emitEvent(type, payload?)\` — call this for discrete things the learner does
-     (e.g. "answer_submitted", "hint_requested", "point_moved", "step_completed"). Emit an
-     event for every meaningful learner action, not just some of them — this is how the tutor
-     knows what happened.
-   - \`bridge.registerAction(name, handler)\` — this is the ONLY thing that makes an entry in
-     your \`actions\` field real. Every single name you list in \`actions\` MUST have a matching
-     \`bridge.registerAction("that exact name", handlerFunction)\` call somewhere in your code —
-     with no exceptions. This is a hard, mechanical rule, not a suggestion: if you write
-     \`actions: [{name: "reset"}]\` but never call \`bridge.registerAction("reset", ...)\`
-     anywhere, that is a broken activity, even though it will compile and run without any
-     error. The \`actions\` field is NOT a list of your internal function names, event names, or
-     button labels — click handlers like \`handleSubmit\`, \`onReset\`, or event names like
-     \`"hint_requested"\` (which belongs in \`emitEvent\`, not \`actions\`) must NEVER appear in
-     \`actions\` unless you also separately call \`registerAction\` for that exact name. Correct
-     example:
-     \`\`\`
-     bridge.registerAction("reset_problem", () => { setValue(0); setFeedback(''); });
-     \`\`\`
-     paired with \`actions: [{name: "reset_problem", description: "..."}]\` in your response —
-     the string \`"reset_problem"\` must be character-for-character identical in both places.
-     Every activity must register at least one real, meaningful action this way.
-     If the handler needs specific information to do its job (e.g. a "provide_hint" action's
-     handler needs actual hint text, not just a bare call with no content), declare that in the
-     action's \`args\` field with the exact key the handler reads off its payload object (e.g.
-     \`payload.hint\`) — this is what lets the tutor actually fill it in with real content
-     instead of calling the action with nothing. Leave \`args\` empty only for a genuinely
-     zero-argument action like "reset".
+3. NEVER use a \`<form>\` element, or a \`<button type="submit">\`, anywhere. The sandboxed iframe
+   this runs in has no \`allow-forms\` permission, so submitting a form is silently blocked by the
+   browser — this can prevent your click handler from ever running at all, making the button look
+   completely dead with no visible error. Use a plain \`<div>\` wrapper and \`<button type="button">\`
+   (or no \`type\` attribute) with \`onClick\`, never \`onSubmit\`.
 
-4. Styling: Tailwind utility classes only, using concrete palette classes (e.g. bg-sky-500,
-   text-slate-900, border-slate-200) — NEVER semantic aliases like bg-primary or text-foreground,
-   which don't resolve inside this sandbox. Use relative/flex/grid layout, not fixed pixel
-   widths — this must look correct on a narrow phone screen, not just desktop.
-   When multiple buttons are stacked vertically (e.g. Submit, hint, reset), give them all the
-   same width (e.g. \`w-full\` inside a \`flex flex-col\` container) and consistent spacing via a
-   single \`gap-*\` on the container — never mix per-button margins, which produces a ragged,
-   inconsistent-width stack.
+4. \`const bridge = useTutorBridge()\`:
+   - \`bridge.publishState(state)\` whenever the activity's state changes — this is the only way
+     the tutor knows what's happening; it cannot see the rendered screen. Always include the
+     CURRENT step's actual question/instruction text verbatim (e.g. "Multiply 2 by 13"), not just
+     a step index or type — the tutor cannot infer what's literally being asked from numbers
+     alone, and a mismatch here means its hints answer the wrong step.
+   - \`bridge.emitEvent(type, payload?)\` for learner actions (e.g. "answer_submitted",
+     "hint_requested").
+   - \`bridge.registerAction(name, handler)\`: every entry in \`actions\` must have a matching
+     \`bridge.registerAction("that exact name", ...)\` call in the code. If the handler reads a
+     field off its payload, declare it in that action's \`args\`. Register real actions for
+     whatever a learner might reasonably ask the tutor to do on their behalf here — at minimum,
+     filling in the current answer/value and submitting/checking it, so "can you do this one for
+     me?" actually works, not just a single token action. An action that sets a value MUST update
+     the exact same state variable the corresponding input's displayed value reads from — if the
+     action succeeds (the tutor sees "done") but the field on screen doesn't visibly change, that
+     action is broken even though it reported success.
 
-5. Non-negotiable UX, regardless of what the activity is:
-   - If there's something to check/submit, include a clear, obvious submit/check action —
-     never silent auto-grading with no moment of commitment for the learner.
-   - Give immediate, concrete feedback after a submission — not just right/wrong, but what
-     was right or wrong about it.
-   - Include a visible, clearly-labeled way to ask for help (e.g. a "Need a hint?" button)
-     that calls bridge.emitEvent("hint_requested", ...) — the tutor is what actually helps,
-     this is the on-ramp to it, not a dead end.
-   - If a button performs an action rather than just submitting/checking (e.g. a step in a
-     multi-step process like "subtract 6 from both sides"), its effect must be understandable
-     BEFORE clicking, not discoverable only by clicking it. Precede a set of action buttons with
-     a short line explaining what they do (e.g. "Do these steps in order:") so they never read
-     as a passive list of instructions or hints — the button text should describe an action the
-     learner takes, not narrate a fact.
-   - Ordered/sequential steps (do X, then Y, then Z) must use three visually distinct states,
-     not just enabled/disabled: DONE (muted color, a checkmark, past-tense label — e.g. a light
-     gray "✓ Step 1: Subtracted 6"), the one CURRENTLY ACTIONABLE step (strongly highlighted —
-     e.g. a ring/border plus its normal color — so it is unmistakable which one to do next, not
-     merely "not grayed out"), and steps not yet reachable (visibly muted, disabled, no special
-     label). Never leave more than one step looking equally actionable at the same time.
-   - When a step transforms a value shown on screen, show what happened to EVERY part it
-     affected, not just whichever part changed most visibly. E.g. dividing an equation by a
-     number changes both a coefficient (which may just disappear, e.g. "2x" -> "x") and a
-     constant (an obvious arithmetic change, e.g. "8" -> "4") — if only the obvious side is
-     shown, the less-obvious change reads as if nothing happened there, even though the same
-     operation applied to it. Show the actual before/after operation explicitly (e.g.
-     "2x ÷ 2 = 8 ÷ 2 → x = 4"), not just the collapsed end state.
+5. Tailwind utility classes only, using concrete colors (e.g. bg-sky-500) — no semantic aliases
+   like bg-primary.
 
-6. Keep it focused: one activity, one concept, doing it well. Do not try to cover everything
-   related to the topic.
+6. If you implement drag-to-move (e.g. a draggable point on a graph) using
+   \`window.addEventListener\`/\`document.addEventListener\` for pointer/mouse move, NEVER read a
+   piece of component state directly inside that listener's closure — \`setState\` doesn't update
+   it synchronously, so the listener keeps seeing the STALE value from when it was attached (e.g.
+   a "which point is being dragged" check that always sees its old value, so the drag visibly
+   starts but never actually updates anything). Store that value in a \`useRef\` you update
+   alongside the state, and read the ref inside the listener instead.
 
-OUTPUT FORMAT — read this carefully, it is a common source of failure:
+7. Include a submit/check action, feedback after submitting, and a "Need a hint?" action that
+   emits \`hint_requested\`. On the LAST step, correct feedback must say the activity is complete —
+   never a generic "moving to the next step" when there isn't one. Any explanatory text you show
+   (feedback, an intro line, etc.) should build understanding one small idea at a time — never
+   dump the full method or solution in a single block of text.
 
-Return a single JSON object matching the schema exactly: \`title\` (string), \`code\` (string —
-the full TSX source), \`actions\` (array). Nothing else — no prose before or after the JSON, no
-markdown code fence around it.
-
-The \`code\` field is a JSON STRING containing your TSX source, not literal TSX. Every line break
-inside it MUST be the two-character escape sequence \\n — never a real, literal newline
-character. The same applies to any literal tab or double-quote character inside that string.
-This matters most at the edges of JS template literals (backtick strings with \${...}
-interpolation) inside your generated code — that is exactly where a literal newline is most
-likely to slip in by mistake instead of the escaped \\n, which breaks the JSON itself even when
-the TSX source you intended is completely correct.`;
+Return a single JSON object: \`title\`, \`code\` (the full TSX source as a string), \`actions\`.
+Nothing else — no prose, no markdown fence. Escape every line break inside \`code\` as \\n.`;
 
 interface PriorAttempt {
   code: string;
@@ -277,15 +230,12 @@ Fix only what's broken and return the corrected activity in full.`
         schema: ActivityGenerationSchema,
         system: SYSTEM_PROMPT,
         prompt: userContent,
-        // Widened from 120s after repeated real-world timeouts at that limit (several
-        // attempts genuinely still working, just slow on this free tier) — 10 minutes gives
-        // room to actually see a call complete rather than keep cutting off in-progress work.
-        // Real cost of this: 3 attempts at a full 10 minutes each is 30 minutes worst case,
-        // which exceeds any realistic Vercel serverless function limit (even Pro + Fluid
-        // Compute tops out far below that) — this value is appropriate for local testing
-        // (`bun run start`, no wall-clock kill) while verifying the pipeline can actually
-        // succeed at all; it is not the production-ready number. See CLAUDE.md "Reliability."
-        abortSignal: AbortSignal.timeout(600_000),
+        // 120s per attempt — gpt-4o-mini responds well within this on a normal call, so this is
+        // a real timeout (catches a genuinely stuck call), not headroom for known slow free-tier
+        // latency like the old OpenRouter free models needed. 3 attempts at 120s each is 6
+        // minutes worst case (see MAX_TOTAL_MINUTES in lib/generation-constants.ts, which this
+        // must stay in sync with), comfortably under any realistic Vercel serverless limit.
+        abortSignal: AbortSignal.timeout(120_000),
         repairText: repairModelJson,
         // OpenAI's strict structured-outputs mode (the @ai-sdk/openai provider's default)
         // requires every property in the schema to appear in JSON Schema's `required` array —
@@ -342,9 +292,9 @@ export function inferMissingActionArgs(
   // (tried first) bled a second action's payload field into an earlier one whenever two
   // handlers sat close together in the source, which real generated code does often — caught by
   // this function's own test suite before it ever reached production.
-  const allCallPositions = Array.from(code.matchAll(/registerAction\s*\(\s*['"][^'"]+['"]/g)).map(
-    (m) => m.index,
-  );
+  const allCallPositions = Array.from(
+    code.matchAll(/registerAction\s*\(\s*['"][^'"]+['"]/g),
+  ).map((m) => m.index);
 
   return actions.map((action) => {
     if (action.args && action.args.length > 0) return action;
@@ -355,7 +305,8 @@ export function inferMissingActionArgs(
     const match = registerCallPattern.exec(code);
     if (!match) return action;
 
-    const windowEnd = allCallPositions.find((pos) => pos > match.index) ?? code.length;
+    const windowEnd =
+      allCallPositions.find((pos) => pos > match.index) ?? code.length;
     const windowText = code.slice(match.index, windowEnd);
     const fieldNames = new Set<string>();
     const fieldPattern = /payload\??\.(\w+)/g;
@@ -395,7 +346,12 @@ export function findUnregisteredActions(
 ): string[] {
   return actions
     .map((a) => a.name)
-    .filter((name) => !new RegExp(`registerAction\\s*\\(\\s*['"]${escapeRegExp(name)}['"]`).test(code));
+    .filter(
+      (name) =>
+        !new RegExp(
+          `registerAction\\s*\\(\\s*['"]${escapeRegExp(name)}['"]`,
+        ).test(code),
+    );
 }
 
 function escapeRegExp(str: string): string {

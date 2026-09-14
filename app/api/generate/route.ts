@@ -9,12 +9,10 @@ import { traceEvent } from "@/lib/trace";
 import type { AttemptRecord } from "@/lib/types";
 import { compileActivity, type CompileError } from "@/lib/validate/compile";
 
-// Vercel's actual serverless ceiling (even Pro + Fluid Compute) sits well under what 3
-// attempts at generateActivity.ts's current 10-minute-per-call timeout could take (worst case
-// 30 minutes) — this value is capped at what the platform will actually allow rather than
-// matched to that worst case, which is unreachable in a real deployment regardless of this
-// setting. Fine for local testing (`bun run start`, no such kill), a real constraint at
-// deploy time — named explicitly in the README, not glossed over.
+// Vercel's actual serverless ceiling (even Pro + Fluid Compute). 3 attempts at
+// generateActivity.ts's current 120s-per-call timeout is 6 minutes worst case (see
+// MAX_TOTAL_MINUTES in lib/generation-constants.ts), comfortably under this — unlike the old
+// 10-minute-per-call timeout, this value is no longer the binding constraint on retries.
 export const maxDuration = 800;
 
 const MAX_PROMPT_LENGTH = 500;

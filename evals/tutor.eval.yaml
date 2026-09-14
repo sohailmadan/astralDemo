@@ -7,7 +7,9 @@ description: >
   Run with: bunx promptfoo eval -c evals/tutor.eval.yaml --max-concurrency 3
 
 providers:
-  - "exec:bun run evals/run-tutor.ts"
+  # See generation.eval.yaml for why this needs the cd .. — promptfoo's exec provider runs
+  # with cwd set to this config file's directory (evals/), not the repo root.
+  - "exec:bash -c 'cd .. && bun run evals/run-tutor.ts \"$@\"' _"
 
 prompts:
   - "{{fixture}}"
