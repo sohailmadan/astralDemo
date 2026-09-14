@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
+import { PlaceholderCard } from "@/components/activity/placeholder-card";
 import { GenerationProgress } from "@/components/generate/generation-progress";
 import { StalledNotice } from "@/components/generate/stalled-notice";
 import { createClient } from "@/lib/supabase/client";
@@ -55,7 +56,7 @@ export function GeneratingView({
   }, [activityId, router]);
 
   return (
-    <div className="flex min-h-64 flex-col items-center justify-center gap-3 rounded-lg border border-border bg-card p-10 text-center">
+    <PlaceholderCard size="lg">
       <span className="h-2 w-2 animate-pulse rounded-full bg-primary" />
       <p className="text-sm text-muted-foreground">
         Generating your activity — this page will update automatically.
@@ -65,6 +66,6 @@ export function GeneratingView({
       ) : (
         <GenerationProgress createdAt={createdAt} attempt={attempt} />
       )}
-    </div>
+    </PlaceholderCard>
   );
 }

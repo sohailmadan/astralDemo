@@ -2,6 +2,8 @@
 
 import { Component, type ReactNode } from "react";
 
+import { PlaceholderCard } from "@/components/activity/placeholder-card";
+
 /**
  * Wraps ActivityFrame (the component owning the iframe + postMessage bridge). Catches bugs in
  * *our own* host-side bridge/rendering code — the sandboxed generated code itself can never
@@ -25,11 +27,11 @@ export class ActivityErrorBoundary extends Component<
   render() {
     if (this.state.hasError) {
       return (
-        <div className="flex min-h-64 items-center justify-center rounded-lg border border-border bg-card p-6 text-center">
+        <PlaceholderCard>
           <p className="text-sm text-muted-foreground">
             Something went wrong displaying this activity. Try reloading the page.
           </p>
-        </div>
+        </PlaceholderCard>
       );
     }
     return this.props.children;

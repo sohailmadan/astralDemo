@@ -1,5 +1,6 @@
 import { ActivityList } from "@/components/generate/activity-list";
 import { PromptForm } from "@/components/generate/prompt-form";
+import { APP_TAGLINE } from "@/lib/app-copy";
 import { listActivities } from "@/lib/supabase/queries";
 
 // Always render per-request — this list is per-user live data, never a candidate for the
@@ -10,15 +11,12 @@ export default async function GeneratePage() {
   const activities = await listActivities();
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-2xl flex-col gap-10 px-5 py-16">
+    <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-10 px-5 py-12">
       <header className="flex flex-col gap-2">
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-          Generative Interactive Learning
+          What do you want to learn?
         </h1>
-        <p className="text-sm text-muted-foreground">
-          Describe what you want to learn. You&rsquo;ll get a generated,
-          interactive activity with an AI tutor.
-        </p>
+        <p className="text-sm text-muted-foreground">{APP_TAGLINE}</p>
       </header>
 
       <PromptForm />

@@ -2,6 +2,8 @@
 
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 
+import { PlaceholderCard } from "@/components/activity/placeholder-card";
+import { postActivityEvent, postActivityState } from "@/lib/api-client";
 import { buildActivityIframeHtml } from "@/lib/validate/iframe-html";
 import type { Activity } from "@/lib/types";
 import type { ActivityToHostMessage } from "@/sdk/types";
@@ -118,19 +120,11 @@ export const ActivityFrame = forwardRef<ActivityFrameHandle, ActivityFrameProps>
         // CLAUDE.md "AI tutor <-> activity interface") — every publishState/emitEvent call the
         // activity makes is durably stored, not just held here in memory.
         if (data.type === "STATE_SNAPSHOT") {
-          void fetch(`/api/activities/${activity.id}/events`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ kind: "state", state: data.state }),
-          });
+          postActivityState(activity.id, data.state);
         }
 
         if (data.type === "EVENT") {
-          void fetch(`/api/activities/${activity.id}/events`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ kind: "event", eventType: data.eventType, payload: data.payload }),
-          });
+          postActivityEvent(activity.id, data.eventType, data.payload);
           onEvent?.(data.eventType, data.payload);
         }
 
@@ -149,9 +143,9 @@ export const ActivityFrame = forwardRef<ActivityFrameHandle, ActivityFrameProps>
 
     if (!srcDoc) {
       return (
-        <div className="flex min-h-64 items-center justify-center rounded-lg border border-border bg-card p-6 text-center">
+        <PlaceholderCard>
           <p className="text-sm text-muted-foreground">This activity has no compiled output.</p>
-        </div>
+        </PlaceholderCard>
       );
     }
 
@@ -161,18 +155,18 @@ export const ActivityFrame = forwardRef<ActivityFrameHandle, ActivityFrameProps>
     // caught while fixing this).
     if (!mounted) {
       return (
-        <div className="flex min-h-64 items-center justify-center rounded-lg border border-border bg-card p-6 text-center">
+        <PlaceholderCard>
           <p className="text-sm text-muted-foreground">Loading activity…</p>
-        </div>
+        </PlaceholderCard>
       );
     }
 
     if (status === "hung") {
       return (
-        <div className="flex min-h-64 flex-col items-center justify-center gap-2 rounded-lg border border-border bg-card p-6 text-center">
+        <PlaceholderCard>
           <p className="text-sm font-medium text-foreground">This activity didn&rsquo;t load correctly.</p>
           <p className="text-xs text-muted-foreground">Try regenerating it.</p>
-        </div>
+        </PlaceholderCard>
       );
     }
 

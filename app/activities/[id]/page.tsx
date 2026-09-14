@@ -23,7 +23,7 @@ export default async function LearnPage({ params }: { params: Promise<{ id: stri
 
   if (activity.status === "generating") {
     return (
-      <main className="mx-auto flex min-h-screen w-full max-w-2xl flex-col gap-8 px-5 py-8">
+      <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-8 px-5 py-8">
         <LearnHeader />
         <GeneratingView
           activityId={activity.id}
@@ -37,7 +37,7 @@ export default async function LearnPage({ params }: { params: Promise<{ id: stri
 
   if (activity.status === "failed") {
     return (
-      <main className="mx-auto flex min-h-screen w-full max-w-2xl flex-col gap-8 px-5 py-8">
+      <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-8 px-5 py-8">
         <LearnHeader />
         <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
           <p className="text-sm font-medium text-foreground">This activity couldn&rsquo;t be generated.</p>
@@ -50,7 +50,7 @@ export default async function LearnPage({ params }: { params: Promise<{ id: stri
   const tutorMessages = await listTutorMessages(activity.id);
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-6 px-5 py-8">
+    <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-5 py-8">
       <LearnHeader title={activity.title} />
       <div className="flex flex-1 flex-col gap-6 lg:flex-row">
         <ActivityWorkspace activity={activity} initialMessages={tutorMessages} />

@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
 import { Geist } from "next/font/google";
+
+import { AppHeader } from "@/components/app-header";
+import { APP_NAME, APP_TAGLINE } from "@/lib/app-copy";
 import "./globals.css";
 
 const defaultUrl = process.env.VERCEL_URL
@@ -8,9 +11,8 @@ const defaultUrl = process.env.VERCEL_URL
 
 export const metadata: Metadata = {
   metadataBase: new URL(defaultUrl),
-  title: "Generative Interactive Learning",
-  description:
-    "Describe what you want to learn — get a generated, interactive activity with an AI tutor.",
+  title: APP_NAME,
+  description: APP_TAGLINE,
 };
 
 const geistSans = Geist({
@@ -26,7 +28,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${geistSans.className} antialiased`}>{children}</body>
+      <body className={`${geistSans.className} flex min-h-screen flex-col bg-background antialiased`}>
+        <AppHeader />
+        <div className="flex flex-1 flex-col">{children}</div>
+      </body>
     </html>
   );
 }
