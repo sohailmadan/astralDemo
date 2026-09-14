@@ -4,206 +4,197 @@ A two-page app: describe what you want to learn, get back a real, generated, int
 piece of software to learn it with — not an article, not a static quiz — alongside an AI
 tutor that can see and act on the activity's live state.
 
-Built for a take-home challenge. See `CLAUDE.md` for the full, detailed architecture record
-kept up to date as the project progressed — this README is the required overview; `CLAUDE.md`
-is the "why," including live findings from testing against real free-tier models.
+Built for a take-home challenge. See `CLAUDE.md` for the detailed architecture/reliability
+record kept up to date as the project progressed.
 
-**Status**: Milestones 1 and 2 (app skeleton, real generation pipeline) are complete and
-verified against a live deployment. Milestone 3 (the AI tutor) is in progress — see
-"What's not built yet" below.
+**Status**: Milestones 1–3 (app skeleton, generation pipeline, AI tutor) complete and working
+locally. Milestone 4 (polish) in progress. **Not deployed to production yet** — verified via
+`bun run dev`/`bun run start` only. Sample Langfuse trace + access grant to
+shivam@astraltutor.com also not yet done.
 
 ## Architecture
 
 ```
 app/
-  page.tsx                     Generate page (/)
-  activities/[id]/page.tsx     Learn page
-  api/generate/route.ts        generate -> validate -> repair pipeline
+  page.tsx                        Generate page (/)
+  activities/[id]/page.tsx        Learn page
+  api/generate/route.ts           generate -> validate -> repair pipeline
+  api/tutor/route.ts              tutor context assembly + tool-calling turn
+  api/activities/[id]/events/route.ts          state/event persistence + progress reset
+  api/activities/[id]/tutor-messages/route.ts  chat transcript persistence
 lib/
   ai/
-    openrouter.ts              single provider access point (model swappable here only)
-    generateActivity.ts        the generation call: schema, system prompt, repair support
-  sandbox/
-    compile.ts                 esbuild + Tailwind JIT compile/validate step
-    iframe-html.ts             assembles the sandboxed iframe's srcDoc
-  supabase/
-    client.ts / server.ts      anon-key clients (browser / server-rendered pages)
-    service.ts                 service-role client — server routes only, bypasses RLS
-    queries.ts                 typed reads
-  generation-constants.ts      retry/timeout constants shared by the pipeline and the UI
-  use-is-stale.ts              detects a generating row stuck past its own worst-case time
+    openrouter.ts                 provider access point (OpenRouter + OpenAI escalation)
+    generateActivity.ts           generation call: schema, system prompt, repair support
+    tutor.ts                      tutor context assembly + tool-calling turn
+  validate/
+    compile.ts                    esbuild + Tailwind JIT compile/validate
+    iframe-html.ts                sandboxed iframe srcDoc (incl. initialState injection)
+  supabase/                       client.ts, server.ts, service.ts, queries.ts
+  generation-constants.ts         retry/timeout constants shared by pipeline + UI
+  trace.ts                        Langfuse tracing (direct HTTP client)
 components/
-  generate/                    Generate page: prompt form, activity list, progress UI
-  activity/                    Learn page: sandboxed iframe host, error boundary
-  ui/                          shadcn primitives (button, input, card, ...)
+  generate/                       Generate page UI
+  activity/                       Learn page: iframe host, tutor chat, error boundary
+  ui/                             shadcn primitives
 sdk/
-  activity-sdk.ts              the useTutorBridge() hook, bundled into every generated activity
-  types.ts                     the fixed contract's types + the host<->activity message protocol
-evals/
-  generation.eval.yaml         promptfoo suite — run before any prompt/contract change
-  run-generation.ts            exec provider calling the real pipeline (not a mock)
-supabase/migrations/           schema, RLS policies, Realtime publication
-instrumentation.ts             Langfuse tracing registration
+  activity-sdk.ts                 useTutorBridge() hook, bundled into every generated activity
+  types.ts                        fixed contract types + host<->activity message protocol
+evals/                            promptfoo suites (generation + tutor) against the real pipelines
+supabase/migrations/              schema, RLS, Realtime publication
 ```
 
-Everything reachable from the browser is either a Server Component doing a plain read, or a
-Client Component talking to our own `/api/*` routes — nothing in the browser ever holds a
-service-role key or calls OpenRouter/Supabase's privileged APIs directly.
+Everything reachable from the browser is a Server Component doing a plain read, or a Client
+Component talking to our own `/api/*` routes — nothing in the browser holds privileged keys.
 
 ## How generation works
 
-`POST /api/generate` does the fast part synchronously — insert a row (`status: generating`),
-return immediately — then keeps working via Next's `after()`, which is what lets a single
-request return in milliseconds while the actual generation (which can take minutes on free
-models) continues server-side without blocking the client.
+`POST /api/generate` inserts a row and returns immediately, then keeps working via Next's
+`after()`. Up to 3 attempts:
 
-The pipeline (`runGenerationPipeline` in `app/api/generate/route.ts`) is a bounded loop, up to
-3 attempts total:
+1. **Generate** — `generateObject` against a Zod schema (`{ title, code, actions }`). The
+   system prompt is deliberately short — see CLAUDE.md "Reliability" for why a long,
+   heavily-qualified prompt measurably hurt compliance on the one rule that gates everything
+   (every declared action actually being registered). It only encodes the mechanical contract:
+   fixed imports, `useTutorBridge()`/`publishState`/`emitEvent`/`registerAction`, an optional
+   `initialState` prop to resume from, no `<form>` (the sandbox has no `allow-forms`, so a
+   submit silently kills the click handler), and real submit/feedback/hint affordances.
+2. **Validate** — `compileActivity()` bundles with esbuild and JIT-compiles a scoped Tailwind
+   stylesheet from only the classes actually used.
+3. **Repair, if needed** — a compile failure or an unregistered declared action feeds the exact
+   error back for a fix-only-what's-broken retry. Up to 2 repairs.
+4. **Store or fail honestly** — success stores the validated compiled JS/CSS; exhausting all 3
+   attempts writes `status: failed` with the real error.
 
-1. **Generate** — `generateActivityCode()` calls the AI SDK's `generateObject` (not
-   `generateText`) against a Zod schema returning `{ title, code, actions }`. The system
-   prompt encodes the full fixed contract: the generated component may only import `react` and
-   `./activity-sdk`; must call `useTutorBridge()` and use `publishState`/`emitEvent`/
-   `registerAction`; must use concrete Tailwind palette classes (never our app's semantic
-   aliases, which need CSS variables the sandbox doesn't have); and must include a real
-   submit/check action, concrete feedback, and a visible "ask for help" affordance — these are
-   non-negotiable UX rules, not left to chance per-prompt.
-2. **Validate** — `compileActivity()` bundles the generated code with esbuild (the same file
-   temp-written alongside the real SDK source, so `./activity-sdk` resolves correctly) and
-   separately JIT-compiles a scoped Tailwind stylesheet via Tailwind's `content: [{ raw }]`
-   API, containing only the classes the generated code actually uses.
-3. **Repair, if needed** — a compile failure feeds the exact structured error (file/line/
-   column/message) back into a second `generateActivityCode` call with an instruction to fix
-   only what's broken, not start over. Up to 2 repair attempts.
-4. **Store or fail honestly** — success stores the validated compiled JS/CSS directly (so the
-   Learn page never recompiles what's already been validated); exhausting all 3 attempts
-   writes `status: failed` with the real last error — never a disguised success.
+**Model choice**: free OpenRouter models proved unreliable enough in practice (see CLAUDE.md
+"Reliability") that codegen and tutor now default to paid OpenAI models via an escalation in
+`lib/ai/openrouter.ts` (`USE_OPENAI_CODEGEN`/`USE_OPENAI_TUTOR`) — `gpt-5-mini` for codegen
+(more reliable at genuinely decomposing a multi-step process, ~30-60s/call), `gpt-4o-mini` for
+the tutor (fast). The free-tier OpenRouter path still exists as the default otherwise.
 
-Model choice took three rounds of live testing against OpenRouter's actual free tier (the
-originally planned models were discontinued from free between planning and implementation).
-Full account, including two hung/rate-limited candidates rejected and why the current model
-(`cohere/north-mini-code:free`) was kept despite variable latency, is in `CLAUDE.md`
-"Reliability."
+## How the AI tutor works
+
+`POST /api/tutor` (`lib/ai/tutor.ts`) rebuilds context every turn: the activity's `last_state`
+verbatim (must include the current step's actual question text, not just an index, or hints
+answer the wrong step), a plain-language progress summary aggregated from `activity_events`,
+and `tools` built from the activity's own registered `actions` (Zod-validated before any tool
+call can reach the sandboxed iframe). `TutorChat` posts the reply and forwards any action call
+to `ActivityFrame` to invoke inside the iframe. A generated activity's "Need a hint?" only ever
+emits a `hint_requested` event — `ActivityWorkspace` turns that into a real tutor turn.
 
 ## How generated code is validated and executed
 
-- **Validated** server-side by esbuild, which transforms/bundles syntax but never executes the
-  input — running it there carries none of the risk `eval()` on untrusted code would.
-- **Executed** exclusively client-side, inside a sandboxed iframe: `srcDoc` (all JS/CSS inlined,
-  no external resource references at all), `sandbox="allow-scripts"` with **no**
-  `allow-same-origin` (this is what actually isolates it from the host's cookies/storage/DOM),
-  and a CSP baked into that same document (`default-src 'none'`, inline script/style only) —
-  this is what prevents any data-exfiltration attempt from generated code, not just what limits
-  imports at compile time.
-- **Hang protection**: the host sets a handshake timeout — if the iframe doesn't post a
-  `READY` message within 5 seconds, it's treated as hung and a failure state is shown rather
-  than leaving the tab stuck. A true infinite loop can only be caught by a wall-clock watchdog
-  from *outside* the frame, since the frame's own thread would be blocked — this is the
-  practical answer to "what happens if generated code enters an infinite loop," with the known
-  limitation that it can't recover a hang *mid-interaction* after the activity already loaded.
-- **Pre-flight validation before exposure**: compiling is not the same as working — a
-  component can compile fine and still throw on mount. The pre-flight render check inside the
-  same sandboxed iframe catches this before status ever becomes `ready`.
-
-## What's not built yet
-
-Milestone 3, the tutor↔activity bridge, is the remaining major piece:
-
-- `POST /api/tutor` — context assembly (activity + `last_state` + a plain-language progress
-  summary aggregated from a durable `activity_events` log + bounded recent conversation),
-  tool-calling constrained to the activity's registered `actions`.
-- The live `postMessage` bridge (`STATE_SNAPSHOT`/`STATE_DELTA` out, `ACTION_CALL`/
-  `ACTION_RESULT` in) — the SDK contract and protocol types (`sdk/types.ts`) are already built
-  and ready for this; the persistence endpoint and the tutor itself are not yet wired.
-
-Full design (already decided, not yet implemented) is in `CLAUDE.md` "AI tutor <-> activity
-interface."
+- **Validated** server-side by esbuild (transforms/bundles syntax, never executes it).
+- **Executed** in a sandboxed iframe: inlined `srcDoc`, `sandbox="allow-scripts"` only (no
+  `allow-same-origin`, no `allow-forms` — hence the no-`<form>` rule above), and a CSP
+  (`default-src 'none'`) blocking all network access.
+- **Resuming state**: a returning learner's `last_state` is injected as a `window` global in a
+  `<script>` tag before the compiled bundle runs, read once at mount as the `initialState` prop.
+- **Hang protection**: a 5s handshake timeout treats a non-responding iframe as hung.
+- **Pre-flight validation**: the sandboxed render itself must succeed before status becomes
+  `ready` — compiling isn't the same as working.
 
 ## Observability
 
-Langfuse, via its direct HTTP client (`lib/trace.ts`, wrapping `langfuse`'s `.trace()`/
-`.generation()`/`.flushAsync()`) — every generation attempt is captured with the full system +
-user prompt, the full parsed response (title, code, actions), model, latency, and token usage.
-Verified directly against a real deployment: a real success shows the complete ~13k-token
-exchange; a real timeout failure shows `level: ERROR` with the actual error message — nothing
-truncated or summarized in either case.
-
-**Why the direct client, not OpenTelemetry** (worth recording as a real finding, not glossed
-over): the natural-looking approach — the AI SDK's `telemetry: { isEnabled: true }` flag,
-wired to Langfuse via `@langfuse/otel`'s `LangfuseSpanProcessor` through `@vercel/otel` — was
-tried first and never produced a verifiable trace, across three different wiring attempts.
-Root cause: `ai@7` replaced its OpenTelemetry-based telemetry with a new, incompatible
-event-dispatch system (`registerTelemetry`/`AI_SDK_TELEMETRY_INTEGRATIONS`) that Langfuse's
-current packages don't plug into. The direct HTTP client sidesteps that entirely — it's also
-simpler (no OTel provider registration, no `instrumentation.ts`) and every call in testing
-completed without a single thrown error, unlike the OTel path's silent non-delivery.
-
-To see traces: set `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, and `LANGFUSE_BASE_URL` (free
-tier at [cloud.langfuse.com](https://cloud.langfuse.com), no card required) in `.env.local`.
-With no keys set, tracing is skipped entirely rather than failing requests.
+Langfuse via a direct HTTP client (`lib/trace.ts`) — chosen after three different
+OpenTelemetry-based wiring attempts (`ai` SDK telemetry, `@langfuse/otel`, a manual
+`NodeTracerProvider`) never produced a verifiable trace; `ai@7`'s telemetry system is
+incompatible with Langfuse's current OTel packages. Every generation attempt and tutor turn is
+captured (full prompt, response, model, latency, tokens); compile failures are captured
+separately as events since they happen outside any AI SDK call. No keys set → tracing is
+skipped, not a failure. **Not yet done**: sharing a sample trace + access with
+shivam@astraltutor.com.
 
 ## Tradeoffs made
 
-- **`after()`, not a durable queue.** Generation work continues after the HTTP response via
-  Next's `after()`. This is not a queue — if the function is killed mid-callback (a crash, a
-  redeploy), that generation is simply lost, with no retry and no record. Acceptable at this
-  scale (one generation, low volume); the wrong call under real production traffic, where a
-  proper queue/worker (SQS, Vercel Workflows, Inngest) would be correct. A UI-level mitigation
-  exists (`useIsStale` + a retry affordance) but the underlying row is never automatically
-  recovered.
-- **No auth**, per the brief's explicit instruction — RLS is deny-by-default instead: only
-  `activities` has a public policy (`SELECT` only), `tutor_messages`/`activity_events` have
-  none at all, and all writes go through server routes using the service-role key.
-- **Store the compiled bundle, not just source.** `activities.compiled_js`/`compiled_css`
-  hold the exact validated output, so the Learn page serves what was already checked instead
-  of trusting a second, redundant compile to produce the same thing.
-- **A static worst-case time estimate, not a live percentage.** The Generate/Learn pages show
-  "attempt X of 3" (an exact fact) and "can take up to 6 minutes" (derived from the pipeline's
-  own `MAX_GENERATION_ATTEMPTS × timeout` constants) rather than a ticking per-second counter —
-  an earlier version had one, and it read as broken the moment a real run (326s) exceeded the
-  per-attempt estimate it was built around.
-- **`maxDuration = 500`** on `/api/generate`, sized for 3 attempts at the model's measured
-  ~120s worst case. Vercel's Hobby plan caps functions at 60s regardless of this value — this
-  pipeline needs a Pro plan (or Fluid Compute) to actually run in production.
+- **`after()`, not a durable queue** — a killed function loses that generation with no retry.
+  Acceptable at this scale; wrong under real traffic (a proper queue/worker would be correct).
+- **No auth**, per the brief — RLS deny-by-default instead; all writes go through server routes
+  using the service-role key.
+- **Store the compiled bundle**, not just source — the Learn page serves what was validated.
+- **A static worst-case time estimate**, not a live percentage — "attempt X of 3" is exact;
+  "up to 6 minutes" is derived from real pipeline constants.
+- **A short, mechanical-contract-only prompt**, not an exhaustive rulebook — several rounds of
+  live testing showed a long prompt with pedagogical essays and per-bug patches measurably hurt
+  compliance, likely by diluting attention. Kept only rules verified to matter and generalize.
+- **Paid OpenAI models over free OpenRouter, by default** — a deliberate reversal after live
+  testing showed free models' failure rate too high to build against reliably.
 
 ## What I'd improve with more time
 
-- Finish Milestone 3 (the tutor) and Milestone 4 (a real visual/interaction polish pass on
-  generated activities — "Taste" is explicitly graded and hasn't had a dedicated pass yet).
-- Replace `after()` with a real queue/worker if this needed to survive production traffic —
-  named above as a known, accepted limitation at this scale, not an oversight.
-- A background sweep to actually flip stuck `generating` rows to `failed` server-side (the
-  current `useIsStale` fix is a client-side UI affordance, not a server-side guarantee).
-- Broaden the eval suite's prompt coverage and add unit tests for the tutor's context-assembly
-  logic once Milestone 3 lands.
-- Fish Audio voice on the tutor chat (explicit stretch goal, intentionally deferred behind the
-  text-first tutor per the brief's stated minimum bar).
+- Deploy to Vercel + Supabase production and verify against that deployment.
+- Share a sample Langfuse trace + grant shivam@astraltutor.com access.
+- Smaller, more frequent commits — a full session's fixes accumulated uncommitted before being
+  swept into a handful of larger commits.
+- Continue Milestone 4's visual/interaction polish on generated activities specifically.
+- Replace `after()` with a real queue/worker for production traffic.
+- A server-side sweep to flip stuck `generating` rows to `failed` (currently client-UI-only).
+- Broaden eval coverage, and add a repair-loop-aware eval mode (the current suites call
+  generation/tutor once each, not through the real 3-attempt retry loop `/api/generate` uses).
+- Fish Audio voice on the tutor chat (explicit stretch goal, deferred behind text-first tutor).
+
+## Developer guide
+
+**Mental model**: a learning request produces a *fixed-contract* React component (not free-form
+code, not lesson text) that a tiny SDK (`sdk/activity-sdk.ts`) wires to an AI tutor. The
+component owns its own UI/state; it only ever talks outward through three calls
+(`publishState`/`emitEvent`/`registerAction`). The tutor never sees the rendered screen — only
+whatever the activity chooses to `publishState`. Everything else (compiling, sandboxing,
+persistence, retries) exists to make that one narrow contract safe and reliable, not to add
+features to it.
+
+**Adding a new rule to what's generated**: edit `SYSTEM_PROMPT` in `lib/ai/generateActivity.ts`
+(activities) or `SYSTEM_PROMPT_HEADER` in `lib/ai/tutor.ts` (tutor replies). Keep additions
+general — verified in this project that a long prompt full of per-bug patches measurably hurts
+compliance (see "Tradeoffs" above). After any change: `bun run eval:generation` /
+`eval:generation` or `eval:tutor` to check it didn't regress, then rebuild (see restart note
+below) to see it live.
+
+**Adding a new eval case**: add a `vars`/`assert` entry to `evals/generation.eval.yaml` or
+`evals/tutor.eval.yaml`. `run-generation.ts`/`run-tutor.ts` call the real pipeline functions
+directly — no mocking, so a new case is just a new prompt or fixture.
+
+**Adding a new API route or DB column**: routes live in `app/api/**/route.ts`; new tables/
+columns are a new file in `supabase/migrations/`, applied with `supabase db push`.
+
+**Changing the LLM**: everything routes through `lib/ai/openrouter.ts` — never call
+OpenRouter/OpenAI directly from elsewhere. To swap the free-tier default, edit `CODEGEN_MODEL`/
+`TUTOR_MODEL` there. To use paid OpenAI models instead (recommended — see "Tradeoffs"), set in
+`.env.local`: `USE_OPENAI_CODEGEN=true` + `OPENAI_CODEGEN_MODEL=<model>`, and/or
+`USE_OPENAI_TUTOR=true` + `OPENAI_TUTOR_MODEL=<model>`.
+
+**When you need to restart the server**: depends on how it's running.
+- `bun run dev` (development) — hot-reloads automatically. Save a file, the next request picks
+  it up. No restart needed for prompt/UI/route changes.
+- `bun run start` (production build) — does **not** hot-reload. Any server-side change
+  (`lib/ai/*`, `app/api/*`, the SDK, anything `generateActivity.ts`/`tutor.ts` import) needs a
+  full rebuild + restart to take effect:
+  ```bash
+  lsof -ti:3000 -sTCP:LISTEN | xargs -r kill   # stop
+  bun run build                                 # rebuild
+  bun run start &                               # restart
+  ```
+  If you're iterating on the prompt or any server code, prefer `bun run dev` — it removes this
+  step entirely.
 
 ## How to run locally
 
-Requires [Bun](https://bun.sh), a Supabase project, and an OpenRouter API key.
+Requires [Bun](https://bun.sh), a Supabase project, and an OpenRouter API key (an OpenAI key
+too, for the more reliable paid-model escalation above).
 
 ```bash
 bun install
-cp .env.example .env.local   # fill in Supabase + OpenRouter (+ optional Langfuse) values
-```
-
-Apply the schema (three tables, RLS policies, Realtime publication — see
-`supabase/migrations/`) via the Supabase CLI:
-
-```bash
+cp .env.example .env.local   # fill in Supabase + OpenRouter (+ optional OpenAI/Langfuse) values
 supabase link --project-ref <your-project-ref>
 supabase db push
+
+bun run dev                # http://localhost:3000, hot-reloads on save
+bun run test                # unit tests — no LLM calls
+bun run eval:generation     # promptfoo vs. the real generation pipeline — real LLM calls
+bun run eval:tutor          # promptfoo vs. the real tutor pipeline — real LLM calls
 ```
 
-```bash
-bun run dev          # http://localhost:3000
-bun run test          # unit tests (compile pipeline, iframe HTML builder)
-bun run lint
-bun run eval:generation   # promptfoo suite against the real pipeline — slow, real LLM calls
-```
-
-`.env.local` variables (see `.env.example` for the full list): `NEXT_PUBLIC_SUPABASE_URL`,
-`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (server-only — never
-prefix with `NEXT_PUBLIC_`), `OPENROUTER_API_KEY`, and optionally `LANGFUSE_PUBLIC_KEY`/
-`LANGFUSE_SECRET_KEY`/`LANGFUSE_BASE_URL`.
+`.env.local` (see `.env.example`): `NEXT_PUBLIC_SUPABASE_URL`,
+`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (server-only),
+`OPENROUTER_API_KEY`, optionally `OPENAI_API_KEY` + `USE_OPENAI_CODEGEN`/`USE_OPENAI_TUTOR`,
+optionally `LANGFUSE_PUBLIC_KEY`/`LANGFUSE_SECRET_KEY`/`LANGFUSE_BASE_URL`.
