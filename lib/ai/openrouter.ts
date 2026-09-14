@@ -116,6 +116,11 @@ export const CODEGEN_FALLBACK_MODEL = "nvidia/nemotron-3-super-120b-a12b:free";
 export const TUTOR_MODEL = "liquid/lfm-2.5-2.6b:free";
 export const TUTOR_FALLBACK_MODEL = "nvidia/nemotron-3-super-120b-a12b:free";
 
+// Same escalation as USE_OPENAI_CODEGEN above, mirrored for the tutor role — off by default,
+// requires both USE_OPENAI_TUTOR=true and a real OPENAI_API_KEY. Real, paid API calls.
+const USE_OPENAI_TUTOR = process.env.USE_OPENAI_TUTOR === "true";
+const OPENAI_TUTOR_MODEL = process.env.OPENAI_TUTOR_MODEL ?? "gpt-4o-mini";
+
 export function codegenModel(modelId: string = CODEGEN_MODEL) {
   if (USE_OPENAI_CODEGEN) return openai(OPENAI_CODEGEN_MODEL);
   if (USE_LOCAL_OLLAMA) return ollama(OLLAMA_CODEGEN_MODEL);
@@ -123,6 +128,7 @@ export function codegenModel(modelId: string = CODEGEN_MODEL) {
 }
 
 export function tutorModel(modelId: string = TUTOR_MODEL) {
+  if (USE_OPENAI_TUTOR) return openai(OPENAI_TUTOR_MODEL);
   if (USE_LOCAL_OLLAMA) return ollama(OLLAMA_TUTOR_MODEL);
   return openrouter(modelId);
 }
@@ -136,6 +142,7 @@ export function tutorModel(modelId: string = TUTOR_MODEL) {
  */
 export function effectiveModelId(requestedModelId: string, role: "codegen" | "tutor"): string {
   if (role === "codegen" && USE_OPENAI_CODEGEN) return `openai:${OPENAI_CODEGEN_MODEL}`;
+  if (role === "tutor" && USE_OPENAI_TUTOR) return `openai:${OPENAI_TUTOR_MODEL}`;
   if (!USE_LOCAL_OLLAMA) return requestedModelId;
   return `ollama:${role === "codegen" ? OLLAMA_CODEGEN_MODEL : OLLAMA_TUTOR_MODEL}`;
 }
