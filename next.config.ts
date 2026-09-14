@@ -22,6 +22,22 @@ const nextConfig: NextConfig = {
   // script, or under `next dev`'s more lenient bundling). Excluding both from bundling lets
   // them load via real require() with their own real __dirname.
   serverExternalPackages: ["esbuild", "tailwindcss", "postcss"],
+  // Found via a real deployment failure: esbuild (lib/validate/compile.ts) resolves
+  // "react"/"react-dom" for the GENERATED activity's own bundle at runtime, via nodePaths
+  // pointing at this function's own node_modules — but that resolution happens inside a
+  // template string, not a static import, so Next's file-tracing (which decides what each
+  // serverless function's bundle actually contains) has no way to see it's needed and prunes
+  // it. Worked locally (a full node_modules on disk) and failed only once actually deployed
+  // ("Could not resolve react/jsx-runtime", "react-dom/client") — force-include them.
+  outputFileTracingIncludes: {
+    "/api/generate": [
+      "./node_modules/react/**/*",
+      "./node_modules/react-dom/**/*",
+      // react-dom's own runtime dependency — surfaced by a second real deployment failure
+      // after adding react/react-dom alone wasn't enough ("Could not resolve scheduler").
+      "./node_modules/scheduler/**/*",
+    ],
+  },
   // Baseline security headers on the host app itself — separate from, and in addition to, the
   // sandboxed activity iframe's own CSP (see CLAUDE.md "Security considerations"). Cheap to
   // add, easy to forget.

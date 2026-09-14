@@ -9,11 +9,14 @@ import { traceEvent } from "@/lib/trace";
 import type { AttemptRecord } from "@/lib/types";
 import { compileActivity, type CompileError } from "@/lib/validate/compile";
 
-// Vercel's actual serverless ceiling (even Pro + Fluid Compute). 3 attempts at
-// generateActivity.ts's current 120s-per-call timeout is 6 minutes worst case (see
-// MAX_TOTAL_MINUTES in lib/generation-constants.ts), comfortably under this — unlike the old
-// 10-minute-per-call timeout, this value is no longer the binding constraint on retries.
-export const maxDuration = 800;
+// Vercel's actual serverless ceiling on the Hobby plan (confirmed live via a real deploy
+// attempt: "Serverless Functions must have a maxDuration between 1 and 300 for plan hobby" —
+// 800 was rejected outright, not silently clamped). 3 attempts at generateActivity.ts's
+// 120s-per-call timeout is 6 minutes worst case (see MAX_TOTAL_MINUTES in
+// lib/generation-constants.ts) — slightly over this 300s/5min ceiling in the rare worst case
+// where every attempt needs a repair and each takes the full per-call timeout, but the typical
+// case (one attempt, tens of seconds) is comfortably under it. A Pro plan raises this to 800+.
+export const maxDuration = 300;
 
 export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
