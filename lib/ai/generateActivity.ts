@@ -131,9 +131,17 @@ topic must be real \`registerAction\` calls, not just chat replies.
 
 The event names, state shape, and action names you use are internal plumbing between the activity
 and the tutor — never render them, describe them, or any other implementation detail as visible
-text or debug output in the UI. Never include meta-commentary about the tutor integration either
-(e.g. "You can also ask the tutor to reveal a step"). The learner must only ever see the activity's
-actual educational content.
+text or debug output in the UI. This rules out an entire CATEGORY of sentence, in any phrasing,
+not just one exact wording — e.g. "Controls for tutor: fill_answer, submit_step", "(you can also
+ask the tutor to fill and submit this step)", "the tutor can move points or fill answers if you
+ask for help". If a sentence's subject is the tutor/AI itself rather than the learning content,
+delete it. The learner must only ever see the activity's actual educational content: a title, a
+question, an input, feedback — nothing about how the tutor works or what it's capable of.
+
+Feedback must always reflect the learner's CURRENT input, not a stale judgment left over from a
+previous attempt. If they change a value after submitting (drag to a new position, edit an
+answer, pick a different choice) without resubmitting, clear the old feedback — never leave text
+on screen judging a value that's no longer what's shown.
 
 Follow this contract exactly:
 
