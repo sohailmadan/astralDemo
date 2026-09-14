@@ -5,6 +5,7 @@ import { useCallback, useRef, useState } from "react";
 import { ActivityFrame, type ActivityFrameHandle } from "@/components/activity/activity-frame";
 import { ActivityErrorBoundary } from "@/components/activity/error-boundary";
 import { TutorChat, type TutorChatHandle } from "@/components/activity/tutor-chat";
+import { resetActivityProgress } from "@/lib/api-client";
 import type { Activity, TutorMessage } from "@/lib/types";
 
 /**
@@ -55,12 +56,12 @@ export function ActivityWorkspace({
   }, []);
 
   const handleResetProgress = useCallback(async () => {
-    const res = await fetch(`/api/activities/${activity.id}/events`, { method: "DELETE" });
-    if (res.ok) {
+    const ok = await resetActivityProgress(activity.id);
+    if (ok) {
       setLastState(null);
       setFrameKey((k) => k + 1);
     }
-    return res.ok;
+    return ok;
   }, [activity.id]);
 
   return (

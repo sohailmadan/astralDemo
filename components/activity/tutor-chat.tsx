@@ -2,7 +2,8 @@
 
 import { forwardRef, useImperativeHandle, useState } from "react";
 
-import type { TutorActionCall, TutorMessage } from "@/lib/types";
+import { clearTutorMessages, sendTutorMessage } from "@/lib/api-client";
+import type { TutorMessage } from "@/lib/types";
 
 type ChatMessage = Pick<TutorMessage, "role" | "content"> & {
   id: string;
@@ -41,8 +42,7 @@ export const TutorChat = forwardRef<
   async function handleClear() {
     setIsClearing(true);
     try {
-      const res = await fetch(`/api/activities/${activityId}/tutor-messages`, { method: "DELETE" });
-      if (res.ok) {
+      if (await clearTutorMessages(activityId)) {
         setMessages([]);
       }
     } finally {
@@ -73,26 +73,7 @@ export const TutorChat = forwardRef<
     setMessages((prev) => [...prev, { id: `local-${Date.now()}`, role: "user", content: text }]);
 
     try {
-      const res = await fetch("/api/tutor", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ activityId, message: text }),
-      });
-
-      if (!res.ok) {
-        const body = await res.json().catch(() => null);
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: `error-${Date.now()}`,
-            role: "assistant",
-            content: body?.error ?? "Something went wrong. Try again.",
-          },
-        ]);
-        return;
-      }
-
-      const data: { content: string; actionCall?: TutorActionCall } = await res.json();
+      const data = await sendTutorMessage(activityId, text);
       let actionNote: string | undefined;
 
       if (data.actionCall) {
@@ -106,10 +87,14 @@ export const TutorChat = forwardRef<
         ...prev,
         { id: `reply-${Date.now()}`, role: "assistant", content: data.content, actionNote },
       ]);
-    } catch {
+    } catch (err) {
       setMessages((prev) => [
         ...prev,
-        { id: `error-${Date.now()}`, role: "assistant", content: "Couldn't reach the tutor. Try again." },
+        {
+          id: `error-${Date.now()}`,
+          role: "assistant",
+          content: err instanceof Error ? err.message : "Couldn't reach the tutor. Try again.",
+        },
       ]);
     } finally {
       setIsSending(false);

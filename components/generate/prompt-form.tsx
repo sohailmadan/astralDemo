@@ -7,8 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { generateActivity } from "@/lib/api-client";
 import { EXAMPLE_PROMPTS } from "@/lib/example-prompts";
-
-const MAX_PROMPT_LENGTH = 500;
+import { MAX_PROMPT_LENGTH } from "@/lib/generation-constants";
 
 /**
  * The Generate page's input. Submitting POSTs to /api/generate, which inserts the row and

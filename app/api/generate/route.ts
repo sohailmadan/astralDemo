@@ -3,7 +3,7 @@ import { after } from "next/server";
 import { NextResponse } from "next/server";
 
 import { findUnregisteredActions, generateActivityCode } from "@/lib/ai/generateActivity";
-import { MAX_REPAIR_ATTEMPTS } from "@/lib/generation-constants";
+import { MAX_PROMPT_LENGTH, MAX_REPAIR_ATTEMPTS } from "@/lib/generation-constants";
 import { createServiceClient } from "@/lib/supabase/service";
 import { traceEvent } from "@/lib/trace";
 import type { AttemptRecord } from "@/lib/types";
@@ -14,8 +14,6 @@ import { compileActivity, type CompileError } from "@/lib/validate/compile";
 // MAX_TOTAL_MINUTES in lib/generation-constants.ts), comfortably under this — unlike the old
 // 10-minute-per-call timeout, this value is no longer the binding constraint on retries.
 export const maxDuration = 800;
-
-const MAX_PROMPT_LENGTH = 500;
 
 export async function POST(req: Request) {
   const body = await req.json().catch(() => null);

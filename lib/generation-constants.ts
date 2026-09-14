@@ -6,6 +6,11 @@
 export const MAX_REPAIR_ATTEMPTS = 2;
 export const MAX_GENERATION_ATTEMPTS = MAX_REPAIR_ATTEMPTS + 1; // + the initial attempt
 
+// Shared between the client-side prompt form (truncates as you type) and the server route
+// (rejects anything longer) — was previously defined independently in both places, a real risk
+// if one were ever changed without the other.
+export const MAX_PROMPT_LENGTH = 500;
+
 // Matches generateActivity.ts's abortSignal timeout (in seconds). Used only to derive an honest
 // worst-case total below — never shown to the user directly as a per-attempt promise, since
 // real per-attempt latency varies too much for that to read as anything but wrong.
