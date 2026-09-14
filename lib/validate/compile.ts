@@ -75,7 +75,10 @@ import Activity from "./Activity";
 
 const container = document.getElementById("root");
 if (!container) throw new Error("root element missing");
-createRoot(container).render(<Activity />);
+// __ASTRAL_INITIAL_STATE__ is set by a script tag the host injects into the srcDoc BEFORE this
+// bundle (see lib/validate/iframe-html.ts) — null on a fresh activity, or the last state a
+// previous mount published, on a revisit. Read once, synchronously, at mount time.
+createRoot(container).render(<Activity initialState={window.__ASTRAL_INITIAL_STATE__ ?? null} />);
 
 // Reports real content height to the host so it can size the iframe to fit (see
 // components/activity/activity-frame.tsx) instead of a fixed height that wastes space on a

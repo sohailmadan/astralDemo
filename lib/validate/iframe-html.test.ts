@@ -29,4 +29,31 @@ describe("buildActivityIframeHtml", () => {
 
     expect(html).not.toMatch(/#root\s*\{[^}]*min-height/);
   });
+
+  describe("initialState", () => {
+    it("defaults to null when omitted, so a fresh activity gets no prior state", () => {
+      const html = buildActivityIframeHtml("", "");
+      expect(html).toContain("window.__ASTRAL_INITIAL_STATE__ = null;");
+    });
+
+    it("embeds the given state as JSON before the compiled bundle runs", () => {
+      const html = buildActivityIframeHtml("console.log('bundle')", "", { step: 2, dividend: 452 });
+      const stateIndex = html.indexOf("__ASTRAL_INITIAL_STATE__");
+      const bundleIndex = html.indexOf("console.log('bundle')");
+      expect(stateIndex).toBeGreaterThan(-1);
+      expect(stateIndex).toBeLessThan(bundleIndex);
+      expect(html).toContain('{"step":2,"dividend":452}');
+    });
+
+    // Regression guard: a state value containing a literal "</script>" (e.g. a string the
+    // learner typed, later published back via bridge.publishState) would otherwise close the
+    // injected script tag early, corrupting the srcDoc's HTML structure — this isn't a
+    // theoretical XSS vector (the iframe already has no same-origin access), but it would still
+    // break the page by truncating the JSON and running whatever text followed as markup.
+    it("escapes a literal </script> inside the state so it can't close the injected tag early", () => {
+      const html = buildActivityIframeHtml("", "", { note: "</script><script>evil()" });
+      expect(html).not.toContain("</script><script>evil()");
+      expect(html).toContain("<\\/script>");
+    });
+  });
 });

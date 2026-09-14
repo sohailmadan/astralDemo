@@ -73,7 +73,7 @@ export const ActivityFrame = forwardRef<ActivityFrameHandle, ActivityFrameProps>
 
     const srcDoc =
       activity.compiled_js && activity.compiled_css !== null
-        ? buildActivityIframeHtml(activity.compiled_js, activity.compiled_css ?? "")
+        ? buildActivityIframeHtml(activity.compiled_js, activity.compiled_css ?? "", activity.last_state)
         : null;
 
     useImperativeHandle(ref, () => ({

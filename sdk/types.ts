@@ -9,8 +9,16 @@
  * author decides matters, plus a generic event log, never named fields like attempts/hints.
  */
 
-// Reserved for future use (e.g. replaying a saved state on load). Empty today.
-export type ActivityProps = Record<string, never>;
+// `initialState` lets a re-mounted activity (e.g. the learner leaving and coming back) restore
+// exactly what publishState last reported, instead of always restarting from the generated
+// code's own hardcoded defaults — see ENTRY_SOURCE in lib/validate/compile.ts for how this is
+// populated (a `window` global set by the host BEFORE the bundle runs, read once at mount) and
+// activity-frame.tsx for where activities.last_state feeds it. `null` when there's no prior
+// state (a fresh activity) — undefined is never used so a real code check (`!= null`) is
+// unambiguous.
+export type ActivityProps = {
+  initialState?: Record<string, unknown> | null;
+};
 
 export interface TutorBridge {
   /** Publish the activity's current meaningful state, whatever shape that is for this activity. */

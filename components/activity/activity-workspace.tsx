@@ -33,6 +33,12 @@ export function ActivityWorkspace({
   // no guaranteed name for one across activities (reset, new_problem, reset_problem all appear
   // in practice) — a remount works identically for every activity, no naming assumption needed.
   const [frameKey, setFrameKey] = useState(0);
+  // Tracked separately from `activity` (a prop, never refetched after mount): ActivityFrame now
+  // seeds the generated code's `initialState` from this on every mount (see sdk/types.ts) so a
+  // learner resumes where they left off — but that means a remount after "Reset progress" would
+  // reinject the STALE last_state still sitting in `activity.last_state` and silently undo the
+  // reset, unless this is explicitly cleared to null first.
+  const [lastState, setLastState] = useState(activity.last_state);
 
   const handleAction = useCallback(
     (name: string, args: Record<string, unknown>) => {
@@ -51,6 +57,7 @@ export function ActivityWorkspace({
   const handleResetProgress = useCallback(async () => {
     const res = await fetch(`/api/activities/${activity.id}/events`, { method: "DELETE" });
     if (res.ok) {
+      setLastState(null);
       setFrameKey((k) => k + 1);
     }
     return res.ok;
@@ -60,7 +67,12 @@ export function ActivityWorkspace({
     <>
       <div className="min-w-0 flex-1">
         <ActivityErrorBoundary>
-          <ActivityFrame key={frameKey} ref={frameRef} activity={activity} onEvent={handleActivityEvent} />
+          <ActivityFrame
+            key={frameKey}
+            ref={frameRef}
+            activity={{ ...activity, last_state: lastState }}
+            onEvent={handleActivityEvent}
+          />
         </ActivityErrorBoundary>
       </div>
       {/*

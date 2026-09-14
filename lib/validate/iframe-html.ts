@@ -7,7 +7,15 @@
  * actually prevents a data-exfiltration attempt from generated code, not just what blocks
  * imports at compile time.
  */
-export function buildActivityIframeHtml(js: string, css: string): string {
+export function buildActivityIframeHtml(
+  js: string,
+  css: string,
+  initialState: Record<string, unknown> | null = null,
+): string {
+  // Escaping "</" (not just "</script") is deliberate: it's the only sequence the HTML parser
+  // treats as a potential close tag inside a <script> block, wherever it appears in the JSON
+  // (e.g. a string value containing "</div>"), and JSON.stringify gives no control over that.
+  const initialStateJson = JSON.stringify(initialState).replace(/<\//g, "<\\/");
   const csp = [
     "default-src 'none'",
     "script-src 'unsafe-inline'",
@@ -32,6 +40,7 @@ export function buildActivityIframeHtml(js: string, css: string): string {
 </head>
 <body>
 <div id="root"></div>
+<script>window.__ASTRAL_INITIAL_STATE__ = ${initialStateJson};</script>
 <script>${js}</script>
 </body>
 </html>`;
