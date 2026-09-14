@@ -16,13 +16,20 @@ const SYSTEM_PROMPT_HEADER = `You are a warm, encouraging AI tutor. You can see 
 Rules:
 - Never re-ask or restate something the progress summary below already tells you.
 - If the learner got something wrong, ask them to walk through their thinking first ("what made you pick that?") rather than immediately giving the correct answer — Socratic, not answer-dispensing.
+- When explaining how to do something (e.g. "how do I find the slope?"), build it up one small
+  step at a time and let them respond between steps — never dump the whole method or solution in
+  one message.
 - Keep responses short and concrete. This is a chat, not a lecture.
-- Only invoke an action when it's clearly the right thing to do right now, never just to seem responsive.
+- Only invoke an action when it's clearly the right thing to do right now, never just to seem responsive — and never invoke one whose actual purpose (per its description below) doesn't match what the learner just asked for. If nothing listed fits, don't invoke anything; just reply in words.
+- Always write a real, specific reply in your own words — even when you also invoke an action. Never leave your reply blank or generic ("Done.", "Sure.") and rely on the action alone; the learner only ever sees your words in the chat, the action itself is silent to them.
 - Never claim to know something the state or progress summary below doesn't actually show.
 - When asked for a hint or help, address ONLY the specific question/value in the current state
   below — never mention other steps, later parts of the problem, or the final answer. A hint
   that references something outside what's happening right now reads as confusing rather than
-  helpful, since the learner has no way to tell if it's relevant to what they're stuck on.`;
+  helpful, since the learner has no way to tell if it's relevant to what they're stuck on.
+- Never use LaTeX or math markup (\\[ \\], \\( \\), \\frac, \\text, etc.) — this chat renders
+  plain text only, so that markup shows up as literal backslashes and braces, not formatted math.
+  Write math in plain text instead (e.g. "slope = (y2 - y1) / (x2 - x1)", "x^2" for exponents).`;
 
 /**
  * Turns the raw activity_events log into a short, cheap-to-compute plain-language summary —
@@ -162,8 +169,18 @@ export async function getTutorReply(params: {
   );
 
   const call = result.toolCalls?.[0];
+  const callArgs = (call?.input ?? {}) as Record<string, unknown>;
+  // The prompt above now asks the model to always write real words alongside any action call,
+  // but a small model doesn't reliably follow that — found directly in production, a hint
+  // request got back a bare "Done." with the actual hint text sitting unseen inside the tool
+  // call's own args. Falling back to the first string-valued arg means the content the model
+  // DID produce (just in the wrong field) still reaches the chat instead of a blank "Done.".
+  const firstStringArg = Object.values(callArgs).find((v): v is string => typeof v === "string" && v.length > 0);
   return {
-    content: result.text || (call ? `Done.` : "Sorry, I didn't catch that — could you rephrase?"),
-    actionCall: call ? { name: call.toolName, args: (call.input ?? {}) as Record<string, unknown> } : undefined,
+    content:
+      result.text ||
+      firstStringArg ||
+      (call ? `Performed "${call.toolName}".` : "Sorry, I didn't catch that — could you rephrase?"),
+    actionCall: call ? { name: call.toolName, args: callArgs } : undefined,
   };
 }
