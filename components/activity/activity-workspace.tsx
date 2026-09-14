@@ -82,10 +82,15 @@ export function ActivityWorkspace({
         to grow to fit its content — it would just keep growing and the whole page would scroll
         past it instead. h-[70vh] gives it a real height on every breakpoint; lg:sticky keeps it
         pinned in view alongside the activity iframe (which can be taller, e.g. up to 900px) on
-        desktop, matching main's py-8 (2rem top + bottom = 4rem) so it fills the exact remaining
-        viewport height without an extra scrollbar of its own.
+        desktop. The height calc must account for everything ABOVE the aside on the page — the
+        persistent AppHeader (rendered once in the root layout, ~57px), main's own py-8, and
+        LearnHeader — not just main's own padding, which is all an earlier version of this
+        accounted for. Measured directly (not guessed): omitting the header's height here was a
+        real bug — the message composer sat just past the bottom of the viewport, requiring a
+        scroll to reach it even though
+        nothing here was meant to scroll internally.
       */}
-      <aside className="flex h-[70vh] min-h-0 w-full flex-col lg:sticky lg:top-8 lg:h-[calc(100vh-4rem)] lg:w-80 lg:shrink-0">
+      <aside className="flex h-[70vh] min-h-0 w-full flex-col lg:sticky lg:top-8 lg:h-[calc(100vh-10rem)] lg:w-80 lg:shrink-0">
         <TutorChat
           ref={tutorRef}
           activityId={activity.id}
