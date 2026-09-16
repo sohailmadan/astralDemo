@@ -2,7 +2,12 @@ import { generateText, tool } from "ai";
 import { z } from "zod";
 
 import { traceGeneration } from "../trace";
-import type { Activity, ActivityActionArg, ActivityEvent, TutorMessage } from "../types";
+import type {
+  Activity,
+  ActivityActionArg,
+  ActivityEvent,
+  TutorMessage,
+} from "../types";
 import { effectiveModelId, TUTOR_MODEL, tutorModel } from "./openrouter";
 
 // Same shape as the generation repair loop's bound (see CLAUDE.md "AI tutor <-> activity
@@ -59,7 +64,10 @@ export function computeProgressSummary(events: ActivityEvent[]): string {
   }
 
   const counts = new Map<string, number>();
-  const correctCounts = new Map<string, { correct: number; incorrect: number }>();
+  const correctCounts = new Map<
+    string,
+    { correct: number; incorrect: number }
+  >();
   const lastOutcome = new Map<string, boolean>();
 
   for (const event of events) {
@@ -68,7 +76,10 @@ export function computeProgressSummary(events: ActivityEvent[]): string {
     const payload = event.payload;
     if (payload && typeof payload === "object" && "correct" in payload) {
       const isCorrect = Boolean((payload as { correct: unknown }).correct);
-      const entry = correctCounts.get(event.type) ?? { correct: 0, incorrect: 0 };
+      const entry = correctCounts.get(event.type) ?? {
+        correct: 0,
+        incorrect: 0,
+      };
       if (isCorrect) entry.correct++;
       else entry.incorrect++;
       correctCounts.set(event.type, entry);
@@ -82,17 +93,25 @@ export function computeProgressSummary(events: ActivityEvent[]): string {
     if (!outcome) return `${label}: ${count}`;
 
     const last = lastOutcome.get(type);
-    const lastNote = last === undefined ? "" : `, most recent was ${last ? "correct" : "incorrect"}`;
+    const lastNote =
+      last === undefined
+        ? ""
+        : `, most recent was ${last ? "correct" : "incorrect"}`;
     return `${label}: ${count} (${outcome.correct} correct, ${outcome.incorrect} incorrect${lastNote})`;
   });
 
   return `Progress so far — ${parts.join(", ")}.`;
 }
 
-function buildSystemPrompt(activity: Activity, progressSummary: string): string {
+function buildSystemPrompt(
+  activity: Activity,
+  progressSummary: string,
+): string {
   const actionsList = activity.actions.length
     ? activity.actions
-        .map((a) => `- ${a.name}: ${a.description ?? "(no description provided)"}`)
+        .map(
+          (a) => `- ${a.name}: ${a.description ?? "(no description provided)"}`,
+        )
         .join("\n")
     : "(this activity registered no actions — you can only discuss it, not act on it)";
 
@@ -128,7 +147,13 @@ export function buildActionInputSchema(args?: ActivityActionArg[]) {
       // Falls back to the arg's own name when description is missing — a real model has been
       // observed omitting it (substituting its own {name, type} shape instead), and the tool
       // still needs SOME text to describe the field by, even if less specific than intended.
-      args.map((arg) => [arg.name, z.string().optional().describe(arg.description ?? arg.name)]),
+      args.map((arg) => [
+        arg.name,
+        z
+          .string()
+          .optional()
+          .describe(arg.description ?? arg.name),
+      ]),
     ),
   );
 }
@@ -153,19 +178,27 @@ export async function getTutorReply(params: {
     activity.actions.map((action) => [
       action.name,
       tool({
-        description: action.description ?? `Invokes the "${action.name}" action on this activity.`,
+        description:
+          action.description ??
+          `Invokes the "${action.name}" action on this activity.`,
         inputSchema: buildActionInputSchema(action.args),
       }),
     ]),
   );
 
   const messages = [
-    ...history.slice(-MAX_HISTORY_MESSAGES).map((m) => ({ role: m.role, content: m.content }) as const),
+    ...history
+      .slice(-MAX_HISTORY_MESSAGES)
+      .map((m) => ({ role: m.role, content: m.content }) as const),
     { role: "user" as const, content: userMessage },
   ];
 
   const result = await traceGeneration(
-    { name: "tutor-turn", model: effectiveModelId(TUTOR_MODEL, "tutor"), input: { system, messages } },
+    {
+      name: "tutor-turn",
+      model: effectiveModelId(TUTOR_MODEL, "tutor"),
+      input: { system, messages },
+    },
     () =>
       generateText({
         model: tutorModel(),
@@ -183,12 +216,16 @@ export async function getTutorReply(params: {
   // request got back a bare "Done." with the actual hint text sitting unseen inside the tool
   // call's own args. Falling back to the first string-valued arg means the content the model
   // DID produce (just in the wrong field) still reaches the chat instead of a blank "Done.".
-  const firstStringArg = Object.values(callArgs).find((v): v is string => typeof v === "string" && v.length > 0);
+  const firstStringArg = Object.values(callArgs).find(
+    (v): v is string => typeof v === "string" && v.length > 0,
+  );
   return {
     content:
       result.text ||
       firstStringArg ||
-      (call ? `Performed "${call.toolName}".` : "Sorry, I didn't catch that — could you rephrase?"),
+      (call
+        ? `Performed "${call.toolName}".`
+        : "Sorry, I didn't catch that — could you rephrase?"),
     actionCall: call ? { name: call.toolName, args: callArgs } : undefined,
   };
 }
