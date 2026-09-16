@@ -231,8 +231,14 @@ export async function getTutorReply(params: {
     content:
       result.text ||
       firstStringArg ||
+      // Last resort when the model gave neither real prose nor any usable string arg. Never
+      // interpolate call.toolName here (found directly in production: "Performed
+      // "requestHint"." reached the chat) — an internal action identifier is exactly the kind
+      // of plumbing that must never render to the learner, the same rule the generation prompt
+      // enforces on activity code, just discovered here in the tutor's own fallback text
+      // instead. Generic but still natural, not a broken-looking echo of internal state.
       (call
-        ? `Performed "${call.toolName}".`
+        ? "Done — take a look and let me know if you'd like more help."
         : "Sorry, I didn't catch that — could you rephrase?"),
     actionCall: call ? { name: call.toolName, args: callArgs } : undefined,
   };

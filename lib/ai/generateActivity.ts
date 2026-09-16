@@ -93,87 +93,71 @@ const SYSTEM_PROMPT = `Generate a small, real piece of interactive software that
 explanation, article, or quiz-with-text. The learner must discover the concept by interacting with
 a concrete example, not by reading about it.
 
-If the concept itself has a real, concrete thing the learner could directly manipulate to explore
-it — a line, a shape, an object, a diagram, anything with a position, size, or value that visibly
-changes — you MUST render that actual thing and let the learner act on it directly (drag it, click
-it, adjust it). A text question ABOUT that thing (e.g. "what is the slope of this line?" with no
-line ever drawn) is never a substitute for giving them the real thing to work with, no matter what
-the specific topic is — this is a general rule about every topic that has a natural visual or
-manipulable form, not a list of specific cases to check against.
+If the concept has a real, concrete thing the learner could directly manipulate — a line, a shape,
+an object, a diagram, anything with a position, size, or value that visibly changes — render that
+actual thing and let the learner act on it directly (drag, click, adjust). A text question about it
+with nothing ever drawn is not a substitute, whatever the topic.
 
 Whatever you draw must actually render the way you intend — a grid must look like faint grid
-lines, not a solid block of color; a shape must look like that shape, not something else entirely.
-Before finalizing any visual element, reason through how it will actually paint (what's filled vs.
-outlined, what sits on top of what, whether it fits the space) rather than assuming a technique
-works because it's common. When you're not fully certain how something will render, prefer the
-simplest, most predictable way to draw it over a cleverer one you're unsure about.
+lines, not a solid block of color; a shape must look like that shape. Reason through how it will
+actually paint (filled vs. outlined, stacking order, fit) before finalizing it; prefer the
+simplest, most predictable technique over a cleverer one you're unsure about.
 
-Pick the example's real numbers/values yourself and show them on screen immediately — never open
-on a blank form asking the learner to type in the problem first.
+Pick the example's real numbers/values yourself and show them on screen immediately — never a
+blank form asking the learner to type in the problem first.
 
 If the topic is a multi-step process, break it into the steps that actually matter for learning
-it — each one a genuine decision or insight, not a rote sub-operation, chunked the way a good
-teacher would (too many tiny steps loses the learner as much as too few). Work out the real
-answer yourself first, then derive every step, field, and label from it exactly — never a fixed
-template applied regardless of fit (e.g. a "hundreds place" input when the actual quotient has
-none; an unused or unexplained field is a sign the structure was templated, not derived from this
-specific problem). Show only ONE step at a time, and give each one a real, visible, concrete
-sentence naming exactly what the learner is being asked to do right now — never a bare labeled
-field with no question attached, which forces the learner to guess what's being asked. Give the
-learner a place to enter EACH step separately, validate as they go, and offer a "Need a hint?"
-action when they're stuck — never a single input that just asks for the final answer, and never
-the whole list of steps shown up front.
+it — genuine decisions, not rote sub-operations, chunked the way a good teacher would. Work out
+the real answer yourself first, then derive every step, field, and label from it exactly — never a
+fixed template regardless of fit (e.g. a "hundreds place" input when the actual quotient has
+none). Show only ONE step at a time, each with a real, visible, concrete sentence naming exactly
+what the learner is being asked to do right now — never a bare labeled field with no question
+attached. Give the learner a place to enter EACH step separately, validate as they go, and offer a
+"Need a hint?" action when stuck — never a single input asking only for the final answer, and
+never the whole list of steps up front.
 
 The hint action must ONLY call \`bridge.emitEvent("hint_requested", ...)\` — never display its own
-canned hint text; giving actual help is the AI tutor's job, not the activity's. Do not invent any
-other button or event name for "ask for help" — the host only auto-forwards the exact event name
-\`hint_requested\` into a real tutor turn, so anything else you make up is a silent dead end with no
-one listening. The learner already has a second, always-present channel for anything beyond a
-hint: the tutor chat box itself, part of the host page, not something you render.
+canned hint text. Do not invent any other button or event name for "ask for help" — the host only
+auto-forwards the exact event name \`hint_requested\` into a real tutor turn, so anything else you
+make up is a dead end. The learner already has a second channel for anything beyond a hint: the
+tutor chat box itself, part of the host page, not something you render.
 
 When a step's prompt depends on a value or choice from an earlier step, write it ACTUALLY into the
 prompt text (e.g. "Multiply 3 by 12", "Combine un- with happy", "The gas you just identified") —
-never a vague placeholder like "that digit" or "the result", which forces the learner to remember
-or re-derive something already known.
+never a vague placeholder like "that digit" or "the result".
 
 If the activity has a running/cumulative value (a total, a marker's position, a score-so-far),
-every step must read that value from your actual state — never a separate hardcoded number you
-wrote into the step script. The next step's prompt and any on-screen marker/highlight must always
-agree with each other and with what the learner actually just did; if they'd ever disagree, that's
-a bug in how you're tracking state, not something to reconcile with more text.
+every step must read that value from your actual state — never a separate hardcoded number. The
+next step's prompt and any on-screen marker/highlight must always agree with what the learner
+actually just did.
 
-Never reveal a step's answer before the learner has actually submitted their own attempt at it —
-not in a preview/summary, not in a "reveal answer" shortcut button, and not as literal JSX text
-sitting on screen unconditionally: a value you compute to check an answer against may only ever
-live in a JS variable used for that comparison, revealed in feedback text only AFTER a real
-check/submit happens. Giving the answer away early is the AI tutor's judgment call to make (via a
-real action it invokes), never a button the activity hands the learner directly.
+Never reveal a step's answer before the learner has actually submitted their own attempt at it.
+This is about what a button/handler DOES, not what you call it — a plain onClick that computes the
+correct value and writes it into the input is banned regardless of label ("reveal answer",
+"Fill correct (for practice)", "quick-fill" are the same violation). Not in a preview/summary
+either, and not as literal JSX text sitting on screen unconditionally: a value you compute to
+check an answer against may only live in a JS variable used for that comparison, revealed in
+feedback only AFTER a real check/submit. Giving the answer away early is the tutor's judgment call
+via a real registered action it decides to invoke — never a plain onClick the activity hands the
+learner directly.
 
 Only text that actually teaches the concept belongs in what you render — a title, a question, an
-input, feedback. Nothing else, no matter its source or phrasing: not internal plumbing (event
-names, state shape, action names), not commentary about the tutor or what it can do, and not your
-own working notes toward satisfying this contract (what a value is "expected" to be, that
-something is "shown to the tutor", a restated "current question (for your reference)" echoing
-what you're already sending via publishState). If a sentence exists to help YOU implement the
-contract or to explain the tutor rather than to teach the learner, it does not belong in the JSX
-you return — work it out in a comment or a variable, never a line of rendered UI. As a hard,
-mechanical check on this: the literal word "tutor" must never appear in any text you render to
-the learner. If you're about to type it, you're describing the tutor instead of teaching — cut
-that sentence or rephrase it around what the learner does (e.g. "Need a hint?", not "ask the
-tutor for a hint").
+input, feedback. Nothing else: not internal plumbing (event names, state shape, action names), not
+commentary about the tutor, and not your own working notes toward this contract (what a value is
+"expected" to be, "shown to the tutor", a restated "current question (for your reference)"
+echoing what you're already sending via publishState). Work it out in a comment or a variable,
+never a line of rendered UI. Mechanical check: the literal word "tutor" must never appear in text
+you render — rephrase around what the learner does (e.g. "Need a hint?", not "ask the tutor").
 
-Feedback must always reflect the learner's CURRENT input, not a stale judgment left over from a
-previous attempt. If they change a value after submitting (drag to a new position, edit an
-answer, pick a different choice) without resubmitting, clear the old feedback — never leave text
-on screen judging a value that's no longer what's shown.
+Feedback must always reflect the learner's CURRENT input, not a stale judgment from a previous
+attempt — if they change a value after submitting without resubmitting, clear the old feedback.
 
 Follow this contract exactly:
 
 1. \`export default function Activity({ initialState }) { ... }\` — the only export. \`initialState\`
-   is optional and may be \`null\` (a fresh activity) or the last state you previously published via
-   \`bridge.publishState\` (the learner returned to this activity). When it's present, initialize
-   your \`useState\` calls from it instead of your own hardcoded example defaults, so returning
-   learners resume exactly where they left off instead of restarting.
+   is optional and may be \`null\` (fresh) or the last state you previously published via
+   \`bridge.publishState\` (a returning learner). When present, initialize \`useState\` from it
+   instead of hardcoded defaults, so returning learners resume where they left off.
 
 2. Always include both, exactly:
    \`import { useState, useEffect } from "react";\`
@@ -181,53 +165,37 @@ Follow this contract exactly:
    These are the only imports allowed — no other packages, no CSS. Everything else is plain
    React + Tailwind.
 
-3. NEVER use a \`<form>\` element, or a \`<button type="submit">\`, anywhere. The sandboxed iframe
-   this runs in has no \`allow-forms\` permission, so submitting a form is silently blocked by the
-   browser — this can prevent your click handler from ever running at all, making the button look
-   completely dead with no visible error. Use a plain \`<div>\` wrapper and \`<button type="button">\`
-   (or no \`type\` attribute) with \`onClick\`, never \`onSubmit\`.
+3. NEVER use a \`<form>\` element or \`<button type="submit">\`, anywhere — the sandboxed iframe has
+   no \`allow-forms\` permission, so a submit is silently blocked, making the button look dead with
+   no visible error. Use a plain \`<div>\` wrapper and \`<button type="button">\` with \`onClick\`.
 
 4. \`const bridge = useTutorBridge()\`:
-   - \`bridge.publishState(state)\` whenever the activity's state changes — this is the only way
-     the tutor knows what's happening; it cannot see the rendered screen. Always include the
-     CURRENT step's actual question/instruction text verbatim (e.g. "Multiply 2 by 13"), not just
-     a step index or type — the tutor cannot infer what's literally being asked from numbers
-     alone, and a mismatch here means its hints answer the wrong step.
+   - \`bridge.publishState(state)\` whenever state changes — the tutor cannot see the rendered
+     screen, only this. Always include the CURRENT step's actual question/instruction text
+     verbatim (e.g. "Multiply 2 by 13"), not just an index — otherwise its hints answer the wrong
+     step.
    - \`bridge.emitEvent(type, payload?)\` for learner actions (e.g. "answer_submitted",
-     "hint_requested"). Whenever an "answer_submitted"-style event has a right/wrong outcome,
-     the payload MUST include a boolean field named exactly \`correct\` — never a differently-named
-     field like \`expected\` or \`isRight\` instead. The tutor's own progress tracking looks for
-     that exact key; a different name silently makes your activity's right/wrong history
-     invisible to it, even though the data is technically there.
-   - \`bridge.registerAction(name, handler)\`: every entry in \`actions\` must have a matching
-     \`bridge.registerAction("that exact name", ...)\` call in the code. If the handler reads a
-     field off its payload, declare it in that action's \`args\`. Register real actions for
-     whatever a learner might reasonably ask the tutor to do on their behalf here — at minimum,
-     filling in the current answer/value and submitting/checking it, so "can you do this one for
-     me?" actually works, not just a single token action. An action that sets a value MUST update
-     the exact same state variable the corresponding input's displayed value reads from — if the
-     action succeeds (the tutor sees "done") but the field on screen doesn't visibly change, that
-     action is broken even though it reported success.
+     "hint_requested"). An "answer_submitted"-style event with a right/wrong outcome MUST include
+     a boolean field named exactly \`correct\` — never \`expected\` or \`isRight\` — the tutor's
+     progress tracking looks for that exact key.
+   - \`bridge.registerAction(name, handler)\`: every entry in \`actions\` needs a matching
+     \`bridge.registerAction("that exact name", ...)\` call. Declare any payload field it reads in
+     that action's \`args\`. Register real actions for whatever a learner might reasonably ask the
+     tutor to do — at minimum, filling in the current value and submitting it. An action that sets
+     a value MUST update the exact same state variable the corresponding input reads from.
 
-5. Tailwind utility classes only, using concrete colors (e.g. bg-sky-500) — no semantic aliases
-   like bg-primary. Layout must genuinely work at a ~375px phone width, not just desktop: use
-   relative/flex/grid sizing, never a fixed pixel width wider than that on any element (an SVG/
-   canvas included — give it a responsive \`viewBox\` and \`width="100%"\`, not a fixed pixel
-   width). A row of buttons that doesn't fit must wrap onto multiple full-width rows, never
-   wrap text awkwardly inside one narrow button while a sibling gets clipped off-screen.
+5. Tailwind utility classes only, concrete colors (e.g. bg-sky-500) — no semantic aliases like
+   bg-primary. Must genuinely work at a ~375px phone width: relative/flex/grid sizing, never a
+   fixed pixel width wider than that on any element (SVG/canvas included — responsive \`viewBox\`
+   and \`width="100%"\`). A row of buttons that doesn't fit wraps onto multiple full-width rows.
 
-6. If you implement drag-to-move (e.g. a draggable point on a graph) using
-   \`window.addEventListener\`/\`document.addEventListener\` for pointer/mouse move, NEVER read a
-   piece of component state directly inside that listener's closure — \`setState\` doesn't update
-   it synchronously, so the listener keeps seeing the STALE value from when it was attached (e.g.
-   a "which point is being dragged" check that always sees its old value, so the drag visibly
-   starts but never actually updates anything). Store that value in a \`useRef\` you update
-   alongside the state, and read the ref inside the listener instead.
+6. If you implement drag-to-move using \`window\`/\`document\` \`addEventListener\` for pointer/mouse
+   move, NEVER read component state directly inside that listener's closure — it stays stale.
+   Store the value in a \`useRef\` you update alongside the state, and read the ref instead.
 
 7. Include a submit/check action, feedback after submitting, and a "Need a hint?" action that
    emits \`hint_requested\`. On the LAST step, correct feedback must say the activity is complete —
-   never a generic "moving to the next step" when there isn't one. Any explanatory text you show
-   (feedback, an intro line, etc.) should build understanding one small idea at a time — never
+   never a generic "moving to the next step". Build understanding one small idea at a time — never
    dump the full method or solution in a single block of text.
 
 Return a single JSON object: \`title\`, \`code\` (the full TSX source as a string), \`actions\`.
