@@ -28,7 +28,7 @@ export default async function GeneratePage() {
           <h2 className="text-sm font-medium text-muted-foreground">
             Your activities
           </h2>
-          <div className="max-h-[70vh] overflow-y-auto rounded-lg lg:max-h-none">
+          <div className="max-h-[60vh] overflow-y-auto rounded-lg">
             <ActivityList initialActivities={activities} />
           </div>
         </section>
