@@ -12,7 +12,9 @@ Milestone 4 (polish) in progress. **Deployed to Vercel + Supabase production**:
 https://astral-challenge-lilac.vercel.app — verified end-to-end there (a real generation
 request, compiled and rendered, with a working tutor chat), not just a successful build. Env
 vars are set as real Vercel Project settings (`vercel env add`), not passed per-deploy — a
-plain `vercel deploy --prod` redeploys cleanly with no flags needed. On the Hobby plan, so
+plain `vercel deploy --prod` redeploys cleanly with no flags needed. The GitHub repo is
+connected to the Vercel project, so a push to `main` auto-deploys without a manual CLI step.
+On the Hobby plan, so
 `/api/generate`'s `maxDuration` is capped at 300s (see "Tradeoffs" below) rather than the 800s a
 Pro plan would allow. Sample Langfuse trace + access grant to
 shivam@astraltutor.com not yet done.
