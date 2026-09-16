@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -13,9 +12,15 @@ import { MAX_PROMPT_LENGTH } from "@/lib/generation-constants";
  * The Generate page's input. Submitting POSTs to /api/generate, which inserts the row and
  * returns immediately — the new row then appears in ActivityList via the Realtime
  * subscription there, not by us pushing it into local state here. One source of truth.
+ *
+ * Deliberately does NOT call router.refresh() after submitting — found directly in production:
+ * doing so raced with ActivityList's own Realtime subscription (under this app's Cache
+ * Components mode, a refresh right after the insert could tear down and recreate the
+ * subscription at the exact moment the just-inserted row's event was in flight, missing it —
+ * Realtime doesn't redeliver a past event to a freshly re-established subscription). Since
+ * ActivityList is Realtime-driven end to end, nothing here needs the server-refreshed props.
  */
 export function PromptForm() {
-  const router = useRouter();
   const [prompt, setPrompt] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -32,7 +37,6 @@ export function PromptForm() {
     try {
       await generateActivity(trimmed);
       setPrompt("");
-      router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
     } finally {
