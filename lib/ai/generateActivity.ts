@@ -112,16 +112,24 @@ Pick the example's real numbers/values yourself and show them on screen immediat
 on a blank form asking the learner to type in the problem first.
 
 If the topic is a multi-step process, break it into the steps that actually matter for learning
-it — each one a genuine decision or insight, not a rote sub-operation. Too many tiny steps bores
-and loses the learner as much as too few; chunk the process the way a good teacher would. Give the
-learner a place to enter EACH such step separately, validate each one as they go, and offer a
-"Need a hint?" action when they're stuck — never a single input that just asks for the final
-answer. Design the interaction genuinely appropriate to THIS specific topic, not a generic form
-reused across topics.
+it — each one a genuine decision or insight, not a rote sub-operation, chunked the way a good
+teacher would (too many tiny steps loses the learner as much as too few). Work out the real
+answer yourself first, then derive every step, field, and label from it exactly — never a fixed
+template applied regardless of fit (e.g. a "hundreds place" input when the actual quotient has
+none; an unused or unexplained field is a sign the structure was templated, not derived from this
+specific problem). Show only ONE step at a time, and give each one a real, visible, concrete
+sentence naming exactly what the learner is being asked to do right now — never a bare labeled
+field with no question attached, which forces the learner to guess what's being asked. Give the
+learner a place to enter EACH step separately, validate as they go, and offer a "Need a hint?"
+action when they're stuck — never a single input that just asks for the final answer, and never
+the whole list of steps shown up front.
 
 The hint action must ONLY call \`bridge.emitEvent("hint_requested", ...)\` — never display its own
-canned hint text. Giving actual help is the AI tutor's job, not the activity's; the activity's role
-is to surface the request and get out of the way.
+canned hint text; giving actual help is the AI tutor's job, not the activity's. Do not invent any
+other button or event name for "ask for help" — the host only auto-forwards the exact event name
+\`hint_requested\` into a real tutor turn, so anything else you make up is a silent dead end with no
+one listening. The learner already has a second, always-present channel for anything beyond a
+hint: the tutor chat box itself, part of the host page, not something you render.
 
 When a step's prompt depends on a value or choice from an earlier step, write it ACTUALLY into the
 prompt text (e.g. "Multiply 3 by 12", "Combine un- with happy", "The gas you just identified") —
@@ -134,22 +142,12 @@ wrote into the step script. The next step's prompt and any on-screen marker/high
 agree with each other and with what the learner actually just did; if they'd ever disagree, that's
 a bug in how you're tracking state, not something to reconcile with more text.
 
-Show only ONE step at a time — never the whole list of steps up front, and never a preview/summary
-that reveals a step's answer (a computed value, the correct choice, the final result, etc.) before
-the learner has actually submitted their own attempt at it. As a mechanical check on this: any
-value you compute to check an answer against (the correct digit, the target result, whatever
-you'd compare the learner's input to) may only ever live in a JS variable used for that
-comparison — never as literal text sitting in the JSX you return unconditionally. It's fine to
-reveal it in feedback text that only renders AFTER a real check/submit happens; it is never fine
-for it to already be sitting on screen, visible, before the learner has tried.
-
-Never offer a "reveal answer" shortcut the learner can click to see the answer directly — giving
-that away is the AI tutor's judgment call to make (via a real action it invokes), not a button the
-activity hands the learner.
-
-The AI tutor is a second, essential surface: it should be able to actually do things inside the
-activity when the learner asks for help — not just talk. Whatever actions make sense for this
-topic must be real \`registerAction\` calls, not just chat replies.
+Never reveal a step's answer before the learner has actually submitted their own attempt at it —
+not in a preview/summary, not in a "reveal answer" shortcut button, and not as literal JSX text
+sitting on screen unconditionally: a value you compute to check an answer against may only ever
+live in a JS variable used for that comparison, revealed in feedback text only AFTER a real
+check/submit happens. Giving the answer away early is the AI tutor's judgment call to make (via a
+real action it invokes), never a button the activity hands the learner directly.
 
 Only text that actually teaches the concept belongs in what you render — a title, a question, an
 input, feedback. Nothing else, no matter its source or phrasing: not internal plumbing (event
