@@ -136,7 +136,12 @@ a bug in how you're tracking state, not something to reconcile with more text.
 
 Show only ONE step at a time — never the whole list of steps up front, and never a preview/summary
 that reveals a step's answer (a computed value, the correct choice, the final result, etc.) before
-the learner has actually submitted their own attempt at it.
+the learner has actually submitted their own attempt at it. As a mechanical check on this: any
+value you compute to check an answer against (the correct digit, the target result, whatever
+you'd compare the learner's input to) may only ever live in a JS variable used for that
+comparison — never as literal text sitting in the JSX you return unconditionally. It's fine to
+reveal it in feedback text that only renders AFTER a real check/submit happens; it is never fine
+for it to already be sitting on screen, visible, before the learner has tried.
 
 Never offer a "reveal answer" shortcut the learner can click to see the answer directly — giving
 that away is the AI tutor's judgment call to make (via a real action it invokes), not a button the
