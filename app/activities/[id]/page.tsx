@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 
 import { ActivityWorkspace } from "@/components/activity/activity-workspace";
+import { FailedView } from "@/components/activity/failed-view";
 import { GeneratingView } from "@/components/activity/generating-view";
 import { LearnHeader } from "@/components/activity/learn-header";
 import { getActivity, listTutorMessages } from "@/lib/supabase/queries";
@@ -39,10 +40,7 @@ export default async function LearnPage({ params }: { params: Promise<{ id: stri
     return (
       <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-8 px-5 py-8">
         <LearnHeader />
-        <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
-          <p className="text-sm font-medium text-foreground">This activity couldn&rsquo;t be generated.</p>
-          {activity.error && <p className="text-xs text-muted-foreground">{activity.error}</p>}
-        </div>
+        <FailedView prompt={activity.prompt} error={activity.error} />
       </main>
     );
   }

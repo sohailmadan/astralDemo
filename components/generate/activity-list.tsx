@@ -79,8 +79,10 @@ function ActivityRow({ activity }: { activity: Activity }) {
     <div className="flex items-center justify-between gap-4 p-4">
       <div className="min-w-0">
         <p className="truncate text-sm font-medium text-foreground">{title}</p>
-        {activity.status === "failed" && activity.error && (
-          <p className="mt-0.5 truncate text-xs text-destructive">{activity.error}</p>
+        {activity.status === "failed" && (
+          <p className="mt-0.5 text-xs text-destructive">
+            Something went wrong generating this activity.
+          </p>
         )}
         {activity.status === "generating" &&
           (isStale ? (
