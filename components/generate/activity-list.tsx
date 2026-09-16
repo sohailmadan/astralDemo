@@ -30,6 +30,22 @@ export function ActivityList({ initialActivities }: { initialActivities: Activit
         "postgres_changes",
         { event: "*", schema: "public", table: "activities" },
         (payload) => {
+          // A DELETE event only ever populates payload.old, never payload.new — found directly
+          // via real leftover test rows that stayed visible in an already-open tab long after
+          // being deleted from the DB: this handler only ever read payload.new, so every delete
+          // was silently discarded and the row lived forever in local state once added.
+          if (payload.eventType === "DELETE") {
+            const oldId = (payload.old as { id?: string } | undefined)?.id;
+            if (!oldId) return;
+            setActivitiesById((prev) => {
+              if (!prev.has(oldId)) return prev;
+              const next = new Map(prev);
+              next.delete(oldId);
+              return next;
+            });
+            return;
+          }
+
           const row = payload.new as Activity | undefined;
           if (!row?.id) return;
           setActivitiesById((prev) => {
