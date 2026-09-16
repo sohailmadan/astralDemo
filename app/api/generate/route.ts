@@ -3,24 +3,28 @@ import { after } from "next/server";
 import { NextResponse } from "next/server";
 
 import { findUnregisteredActions, generateActivityCode } from "@/lib/ai/generateActivity";
+import { CODEGEN_TIMEOUT_FALLBACK_MODEL } from "@/lib/ai/openrouter";
 import { MAX_PROMPT_LENGTH, MAX_REPAIR_ATTEMPTS } from "@/lib/generation-constants";
 import { createServiceClient } from "@/lib/supabase/service";
 import { traceEvent } from "@/lib/trace";
 import type { AttemptRecord } from "@/lib/types";
 import { compileActivity, type CompileError } from "@/lib/validate/compile";
+import { stripControlChars } from "@/lib/validate/input";
 
 // Vercel's actual serverless ceiling on the Hobby plan (confirmed live via a real deploy
 // attempt: "Serverless Functions must have a maxDuration between 1 and 300 for plan hobby" —
 // 800 was rejected outright, not silently clamped). 3 attempts at generateActivity.ts's
-// 120s-per-call timeout is 6 minutes worst case (see MAX_TOTAL_MINUTES in
-// lib/generation-constants.ts) — slightly over this 300s/5min ceiling in the rare worst case
-// where every attempt needs a repair and each takes the full per-call timeout, but the typical
-// case (one attempt, tens of seconds) is comfortably under it. A Pro plan raises this to 800+.
+// 180s-per-call timeout is 9 minutes worst case (see MAX_TOTAL_MINUTES in
+// lib/generation-constants.ts) — over this 300s/5min ceiling in the rare worst case where every
+// attempt needs a repair and each takes the full per-call timeout (Vercel kills the function
+// mid-run then, leaving the row stuck in "generating" — a known gap, see README "What I'd
+// improve"). The typical case (one attempt, tens of seconds with gpt-5-mini) is comfortably
+// under it — that's what actually happens almost always. A Pro plan raises this to 800+.
 export const maxDuration = 300;
 
 export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
-  const prompt = typeof body?.prompt === "string" ? body.prompt.trim() : "";
+  const prompt = typeof body?.prompt === "string" ? stripControlChars(body.prompt.trim()) : "";
 
   if (!prompt || prompt.length > MAX_PROMPT_LENGTH) {
     return NextResponse.json({ error: "A valid prompt is required." }, { status: 400 });
@@ -52,6 +56,14 @@ async function runGenerationPipeline(activityId: string, prompt: string) {
   let priorAttempt: { code: string; error: string } | undefined;
   let lastFailure = "Generation failed for an unknown reason.";
   const attemptHistory: AttemptRecord[] = [];
+  // Which model the NEXT attempt should use — starts undefined (generateActivityCode's own
+  // default, OPENAI_CODEGEN_MODEL / gpt-5-mini). Only ever changed on a timeout (see the catch
+  // block below): retrying the exact same model risks hitting whatever made it slow again, so
+  // the fallback is a genuinely different model, not another roll of the same dice. A
+  // compile/content failure is a different kind of problem — the same model, fed its own error
+  // back, is the intended repair path for that — so this is left alone everywhere else in the
+  // loop.
+  let nextModel: string | undefined;
 
   for (let attempt = 0; attempt <= MAX_REPAIR_ATTEMPTS; attempt++) {
     const attemptNumber = attempt + 1;
@@ -63,7 +75,7 @@ async function runGenerationPipeline(activityId: string, prompt: string) {
       .eq("id", activityId);
 
     try {
-      const generation = await generateActivityCode(prompt, { priorAttempt });
+      const generation = await generateActivityCode(prompt, { priorAttempt, model: nextModel });
       const compiled = await compileActivity(generation.code);
 
       if (compiled.ok) {
@@ -132,6 +144,17 @@ async function runGenerationPipeline(activityId: string, prompt: string) {
       // against the original prompt rather than repairing something that doesn't exist.
       lastFailure = err instanceof Error ? err.message : String(err);
       priorAttempt = undefined;
+
+      // A timeout means the model itself was too slow to answer at all, not that its answer
+      // was wrong — retrying the exact same free-tier model just re-enters the same latency
+      // variance again (see CODEGEN_MODEL's own comment: "60-120s+"). Switch the NEXT attempt
+      // to the fallback model instead, once — if the fallback also times out, leave it there
+      // rather than flapping back and forth for the remaining attempt.
+      const isTimeout = err instanceof Error && err.name === "TimeoutError";
+      if (isTimeout && nextModel !== CODEGEN_TIMEOUT_FALLBACK_MODEL) {
+        nextModel = CODEGEN_TIMEOUT_FALLBACK_MODEL;
+        console.error(`[generate] activity ${activityId} attempt ${attemptNumber} timed out — next attempt uses fallback model ${CODEGEN_TIMEOUT_FALLBACK_MODEL}`);
+      }
 
       // NoObjectGeneratedError.text carries the model's actual raw output, which the generic
       // .message doesn't — without this, a schema-validation or unparseable-JSON failure was

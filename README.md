@@ -74,10 +74,12 @@ Component talking to our own `/api/*` routes — nothing in the browser holds pr
    attempts writes `status: failed` with the real error.
 
 **Model choice**: free OpenRouter models proved unreliable enough in practice (see CLAUDE.md
-"Reliability") that codegen and tutor now default to paid OpenAI models via an escalation in
-`lib/ai/openrouter.ts` (`USE_OPENAI_CODEGEN`/`USE_OPENAI_TUTOR`) — `gpt-5-mini` for codegen
-(more reliable at genuinely decomposing a multi-step process, ~30-60s/call), `gpt-4o-mini` for
-the tutor (fast). The free-tier OpenRouter path still exists as the default otherwise.
+"Reliability") — including a real, reproduced-in-production timeout past the 120s per-call
+limit — that codegen now always runs on `gpt-5-mini` via OpenAI directly (`lib/ai/openrouter.ts`,
+`OPENAI_CODEGEN_MODEL`), not an opt-in escalation. A timeout specifically retries on a second,
+distinct OpenAI model (`gpt-4o-mini`, `CODEGEN_TIMEOUT_FALLBACK_MODEL`) rather than the same one
+again. The tutor still defaults to the free OpenRouter tier, with `USE_OPENAI_TUTOR=true` as an
+opt-in escalation to `gpt-4o-mini` if that proves unreliable too.
 
 ## How the AI tutor works
 
@@ -124,8 +126,10 @@ shivam@astraltutor.com.
 - **A short, mechanical-contract-only prompt**, not an exhaustive rulebook — several rounds of
   live testing showed a long prompt with pedagogical essays and per-bug patches measurably hurt
   compliance, likely by diluting attention. Kept only rules verified to matter and generalize.
-- **Paid OpenAI models over free OpenRouter, by default** — a deliberate reversal after live
-  testing showed free models' failure rate too high to build against reliably.
+- **Codegen always runs on paid OpenAI (`gpt-5-mini`), not free OpenRouter** — a deliberate
+  reversal after live testing showed free models' failure rate (including a genuine
+  in-production timeout) too high to build against reliably. The tutor still defaults to free
+  OpenRouter, with an opt-in OpenAI escalation if that turns out to need it too.
 - **`maxDuration = 300`, not the 800 a Pro plan allows** — the real Hobby-plan ceiling
   (confirmed by a rejected deploy, not guessed). Slightly under the pipeline's own theoretical
   6-minute worst case if every attempt needs a repair; the typical case (tens of seconds) is
@@ -172,10 +176,10 @@ directly — no mocking, so a new case is just a new prompt or fixture.
 columns are a new file in `supabase/migrations/`, applied with `supabase db push`.
 
 **Changing the LLM**: everything routes through `lib/ai/openrouter.ts` — never call
-OpenRouter/OpenAI directly from elsewhere. To swap the free-tier default, edit `CODEGEN_MODEL`/
-`TUTOR_MODEL` there. To use paid OpenAI models instead (recommended — see "Tradeoffs"), set in
-`.env.local`: `USE_OPENAI_CODEGEN=true` + `OPENAI_CODEGEN_MODEL=<model>`, and/or
-`USE_OPENAI_TUTOR=true` + `OPENAI_TUTOR_MODEL=<model>`.
+OpenRouter/OpenAI directly from elsewhere. Codegen always uses OpenAI now: change the model via
+`OPENAI_CODEGEN_MODEL=<model>` in `.env.local`, or edit its default in `openrouter.ts` directly.
+The tutor still defaults to the free OpenRouter tier (`TUTOR_MODEL`); to escalate it to OpenAI
+too, set `USE_OPENAI_TUTOR=true` + `OPENAI_TUTOR_MODEL=<model>`.
 
 **When you need to restart the server**: depends on how it's running.
 - `bun run dev` (development) — hot-reloads automatically. Save a file, the next request picks
@@ -193,8 +197,8 @@ OpenRouter/OpenAI directly from elsewhere. To swap the free-tier default, edit `
 
 ## How to run locally
 
-Requires [Bun](https://bun.sh), a Supabase project, and an OpenRouter API key (an OpenAI key
-too, for the more reliable paid-model escalation above).
+Requires [Bun](https://bun.sh), a Supabase project, an OpenRouter API key (used for the tutor),
+and an OpenAI API key (required — codegen always runs on it, see "Model choice" above).
 
 ```bash
 bun install
@@ -210,5 +214,6 @@ bun run eval:tutor          # promptfoo vs. the real tutor pipeline — real LLM
 
 `.env.local` (see `.env.example`): `NEXT_PUBLIC_SUPABASE_URL`,
 `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (server-only),
-`OPENROUTER_API_KEY`, optionally `OPENAI_API_KEY` + `USE_OPENAI_CODEGEN`/`USE_OPENAI_TUTOR`,
-optionally `LANGFUSE_PUBLIC_KEY`/`LANGFUSE_SECRET_KEY`/`LANGFUSE_BASE_URL`.
+`OPENROUTER_API_KEY`, `OPENAI_API_KEY` (required — codegen always uses it), optionally
+`USE_OPENAI_TUTOR` to escalate the tutor too, optionally
+`LANGFUSE_PUBLIC_KEY`/`LANGFUSE_SECRET_KEY`/`LANGFUSE_BASE_URL`.

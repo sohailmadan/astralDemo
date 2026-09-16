@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { createServiceClient } from "@/lib/supabase/service";
+import { isValidUuid } from "@/lib/validate/input";
 
 /**
  * Clears an activity's tutor conversation so a learner can start fresh with the tutor. Must
@@ -14,6 +15,9 @@ import { createServiceClient } from "@/lib/supabase/service";
  */
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  if (!isValidUuid(id)) {
+    return NextResponse.json({ error: "Invalid activity id." }, { status: 400 });
+  }
 
   const supabase = createServiceClient();
   const { error } = await supabase.from("tutor_messages").delete().eq("activity_id", id);

@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { getTutorReply } from "@/lib/ai/tutor";
 import { createServiceClient } from "@/lib/supabase/service";
 import type { Activity, ActivityEvent, TutorMessage } from "@/lib/types";
+import { isValidUuid, stripControlChars } from "@/lib/validate/input";
 
 const MAX_MESSAGE_LENGTH = 1000;
 const HISTORY_FETCH_LIMIT = 20; // matches lib/ai/tutor.ts's MAX_HISTORY_MESSAGES
@@ -17,9 +18,9 @@ const HISTORY_FETCH_LIMIT = 20; // matches lib/ai/tutor.ts's MAX_HISTORY_MESSAGE
 export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
   const activityId = typeof body?.activityId === "string" ? body.activityId : "";
-  const message = typeof body?.message === "string" ? body.message.trim() : "";
+  const message = typeof body?.message === "string" ? stripControlChars(body.message.trim()) : "";
 
-  if (!activityId || !message || message.length > MAX_MESSAGE_LENGTH) {
+  if (!isValidUuid(activityId) || !message || message.length > MAX_MESSAGE_LENGTH) {
     return NextResponse.json({ error: "A valid activityId and message are required." }, { status: 400 });
   }
 

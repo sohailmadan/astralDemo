@@ -2,7 +2,7 @@ import { generateObject } from "ai";
 import { z } from "zod";
 
 import { traceGeneration } from "../trace";
-import { CODEGEN_MODEL, codegenModel, effectiveModelId } from "./openrouter";
+import { codegenModel, effectiveModelId, OPENAI_CODEGEN_MODEL } from "./openrouter";
 
 export const ActivityGenerationSchema = z.object({
   title: z
@@ -153,7 +153,11 @@ own working notes toward satisfying this contract (what a value is "expected" to
 something is "shown to the tutor", a restated "current question (for your reference)" echoing
 what you're already sending via publishState). If a sentence exists to help YOU implement the
 contract or to explain the tutor rather than to teach the learner, it does not belong in the JSX
-you return — work it out in a comment or a variable, never a line of rendered UI.
+you return — work it out in a comment or a variable, never a line of rendered UI. As a hard,
+mechanical check on this: the literal word "tutor" must never appear in any text you render to
+the learner. If you're about to type it, you're describing the tutor instead of teaching — cut
+that sentence or rephrase it around what the learner does (e.g. "Need a hint?", not "ask the
+tutor for a hint").
 
 Feedback must always reflect the learner's CURRENT input, not a stale judgment left over from a
 previous attempt. If they change a value after submitting (drag to a new position, edit an
@@ -250,7 +254,7 @@ ${opts.priorAttempt.error}
 Fix only what's broken and return the corrected activity in full.`
     : `Learning request: "${prompt}"`;
 
-  const modelId = opts?.model ?? CODEGEN_MODEL;
+  const modelId = opts?.model ?? OPENAI_CODEGEN_MODEL;
   const { object } = await traceGeneration(
     {
       name: "generate-activity",
@@ -263,12 +267,16 @@ Fix only what's broken and return the corrected activity in full.`
         schema: ActivityGenerationSchema,
         system: SYSTEM_PROMPT,
         prompt: userContent,
-        // 120s per attempt — gpt-4o-mini responds well within this on a normal call, so this is
-        // a real timeout (catches a genuinely stuck call), not headroom for known slow free-tier
-        // latency like the old OpenRouter free models needed. 3 attempts at 120s each is 6
-        // minutes worst case (see MAX_TOTAL_MINUTES in lib/generation-constants.ts, which this
-        // must stay in sync with), comfortably under any realistic Vercel serverless limit.
-        abortSignal: AbortSignal.timeout(120_000),
+        // 180s per attempt. Found directly in production: gpt-5-mini (this app's actual codegen
+        // model, see openrouter.ts) genuinely needs more than 120s against this system prompt's
+        // real size plus a full TSX component as JSON output — a real, reproduced timeout, not
+        // a stuck/hung call. 180s gives it realistic room without being unbounded. 3 attempts at
+        // 180s each is 9 minutes worst case (see MAX_TOTAL_MINUTES in lib/generation-constants.ts,
+        // which this must stay in sync with) — over Vercel's 300s/5min Hobby ceiling in that rare
+        // worst case (every attempt needs a repair AND each takes the full timeout), same accepted
+        // trade-off already documented on maxDuration in app/api/generate/route.ts. The typical
+        // case (one attempt succeeds well under this) is what actually matters day to day.
+        abortSignal: AbortSignal.timeout(180_000),
         repairText: repairModelJson,
         // OpenAI's strict structured-outputs mode (the @ai-sdk/openai provider's default)
         // requires every property in the schema to appear in JSON Schema's `required` array —
@@ -279,7 +287,16 @@ Fix only what's broken and return the corrected activity in full.`
         // ("'required' is required to be supplied... Missing 'description'"), not a retryable
         // model failure. This key is OpenAI-specific and namespaced; other providers
         // (OpenRouter, Ollama via its OpenAI-compatible endpoint) simply ignore it.
-        providerOptions: { openai: { strictJsonSchema: false } },
+        //
+        // reasoningEffort: "low" — found directly in production: gpt-5-mini's DEFAULT reasoning
+        // effort against this system prompt's real size took 148s (still produced good output,
+        // just slow) and, at least once, longer than the 180s timeout above outright. "low" cut
+        // that to a reliable ~60s on the identical real prompt, with the same-quality full
+        // output (verified directly, not assumed) — this system prompt is a fixed, mechanical
+        // contract (see its own doc comment), not the kind of open-ended reasoning problem that
+        // benefits from the model thinking longer. Only affects OpenAI's reasoning-model family;
+        // ignored by the free-tier fallback model, which isn't a reasoning model.
+        providerOptions: { openai: { strictJsonSchema: false, reasoningEffort: "low" } },
       }),
   );
 

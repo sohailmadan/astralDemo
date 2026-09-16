@@ -6,13 +6,17 @@ import { POST } from "./route";
 // and network-free. The success path (a real insert/upsert) is covered by manual verification
 // against the live database (see the commit history) rather than a unit test that would need
 // a real or mocked Supabase client either way.
+// A real uuid shape — these tests exercise the validation paths that run AFTER the id-shape
+// check, so the id itself must pass that check (a separate test below covers a malformed id).
+const TEST_ID = "11111111-1111-1111-1111-111111111111";
+
 function request(body: unknown) {
-  return new Request("http://localhost/api/activities/test-id/events", {
+  return new Request(`http://localhost/api/activities/${TEST_ID}/events`, {
     method: "POST",
     body: JSON.stringify(body),
   });
 }
-const params = Promise.resolve({ id: "test-id" });
+const params = Promise.resolve({ id: TEST_ID });
 
 describe("POST /api/activities/[id]/events", () => {
   it("rejects a body with no recognized kind", async () => {
@@ -52,5 +56,16 @@ describe("POST /api/activities/[id]/events", () => {
       { params },
     );
     expect(res.status).toBe(413);
+  });
+
+  it("rejects a malformed (non-uuid) activity id", async () => {
+    const res = await POST(
+      new Request("http://localhost/api/activities/not-a-uuid/events", {
+        method: "POST",
+        body: JSON.stringify({ kind: "event", eventType: "hint_requested" }),
+      }),
+      { params: Promise.resolve({ id: "not-a-uuid" }) },
+    );
+    expect(res.status).toBe(400);
   });
 });

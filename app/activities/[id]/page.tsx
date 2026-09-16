@@ -5,6 +5,7 @@ import { FailedView } from "@/components/activity/failed-view";
 import { GeneratingView } from "@/components/activity/generating-view";
 import { LearnHeader } from "@/components/activity/learn-header";
 import { getActivity, listTutorMessages } from "@/lib/supabase/queries";
+import { isValidUuid } from "@/lib/validate/input";
 
 // Always render per-request — status can change between requests, never a candidate for the
 // static/cached path Next's Cache Components mode defaults to.
@@ -18,6 +19,10 @@ export const instant = false;
  */
 export default async function LearnPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  // A malformed id (not a real uuid) would otherwise reach getActivity's Supabase query and
+  // throw there ("invalid input syntax for type uuid" isn't the "no row found" error code that
+  // function already handles) — an uncaught 500 for what's really just a bad URL, not a 404.
+  if (!isValidUuid(id)) notFound();
   const activity = await getActivity(id);
 
   if (!activity) notFound();

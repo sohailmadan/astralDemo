@@ -45,42 +45,41 @@ const USE_LOCAL_OLLAMA = process.env.USE_LOCAL_OLLAMA === "true";
 const OLLAMA_CODEGEN_MODEL = process.env.OLLAMA_CODEGEN_MODEL ?? "qwen2.5-coder:3b";
 const OLLAMA_TUTOR_MODEL = process.env.OLLAMA_TUTOR_MODEL ?? "llama3.2:3b";
 
-// A second, real-cost dev escalation for codegen specifically — added after qwen2.5-coder:3b
-// (2B-class, local) proved unreliable at the SDK's actual contract, not just syntax: it
-// generated activities that compiled and ran fine but never called bridge.registerAction() at
-// all, despite listing action names in its response — the tutor could observe state but never
-// actually act on the activity, the exact capability the brief calls "the most important
-// part." A 3B-class model, local or free-tier, is genuinely too small to reliably follow a
-// multi-part structural contract like this one. This is NOT a production model choice, it's a
-// local-only escalation for when a free/local model's failures are genuinely about capability
-// rather than something a better prompt or a repair-loop retry can fix. Off by default;
-// requires both USE_OPENAI_CODEGEN=true and a real OPENAI_API_KEY.
-//
 // gpt-5.1-codex-mini (OpenAI's code-specialized small model) was tried first — it's listed as
 // live on this account's /v1/models, but every real call failed with "does not exist or you do
 // not have access to it," a real access-tier restriction distinct from the model merely being
 // listed in the catalog (Codex-branded models are often gated to the Responses API or a
 // different access tier than standard chat completions). Confirmed gpt-5-mini, gpt-4.1-mini,
-// and gpt-4o-mini are all genuinely callable on this account. gpt-5-mini was tried next but
-// explicitly ruled out on cost — the gpt-5 family prices meaningfully higher per token than
-// the gpt-4 family for what is, for this app's purposes, comparable code-generation quality.
-// gpt-4.1-mini is the actual default: a real, cheaper mini model, not the newest available one.
+// and gpt-4o-mini are all genuinely callable on this account.
 const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
-const USE_OPENAI_CODEGEN = process.env.USE_OPENAI_CODEGEN === "true";
-const OPENAI_CODEGEN_MODEL = process.env.OPENAI_CODEGEN_MODEL ?? "gpt-4.1-mini";
+export const OPENAI_CODEGEN_MODEL = process.env.OPENAI_CODEGEN_MODEL ?? "gpt-5-mini";
+// A second, distinct OpenAI model for the timeout-retry path in app/api/generate/route.ts —
+// not a repeat of the same model, so a genuinely slow/degraded gpt-5-mini call doesn't just
+// hit the identical wall again on retry. gpt-4o-mini is confirmed callable on this account
+// (see above) and is a real, different model, not just a cheaper alias.
+export const CODEGEN_TIMEOUT_FALLBACK_MODEL = "gpt-4o-mini";
 
-// Verified live on OpenRouter's /api/v1/models as of this writing — both originally planned
-// models (openai/gpt-oss-120b:free, openai/gpt-oss-20b:free) were discontinued from the free
-// tier between planning and implementation, exactly the risk CLAUDE.md calls out. Re-check
-// https://openrouter.ai/models if either of these starts failing.
-// Real findings from testing multiple candidates (see CLAUDE.md "Reliability" for the full
-// account): nvidia/nemotron-3-super-120b-a12b:free hung 18+ minutes once; a smaller/faster
-// model (google/gemma-4-26b-a4b-it:free) failed fast but only because Google AI Studio's own
-// shared free quota was exhausted upstream — availability, not latency, is the problem there.
-// cohere/north-mini-code:free is the one that actually produced excellent output (a genuinely
-// good draggable slope-explorer activity) when it succeeded, at variable latency (60-120s+).
-// That variability is exactly what the repair loop + honest failure state exists to absorb —
-// not something to eliminate by an endless hunt for a mythical fast, reliable free model.
+// Codegen's production model, replacing the free OpenRouter tier this app used before (its
+// real cost/reliability trade-off is preserved below for the record). gpt-5-mini answers in
+// single-digit seconds to a few tens of seconds on this account, reliably — a real fix for the
+// free tier's documented 60-120s+ variance and occasional garbled/corrupted output, not just a
+// preference. This is a genuine, deliberate reversal of an earlier decision (gpt-5-mini was
+// tried and ruled out on cost during initial model selection) — reliability won out over the
+// per-generation cost once the free tier's failure rate in real use made that trade-off explicit.
+//
+// The free-tier models below are kept defined, unused, for the historical record of what was
+// actually tested — not speculative flexibility, a genuine account of real findings that would
+// otherwise be lost. Verified live on OpenRouter's /api/v1/models as of this writing — both
+// originally planned models (openai/gpt-oss-120b:free, openai/gpt-oss-20b:free) were
+// discontinued from the free tier between planning and implementation, exactly the risk
+// CLAUDE.md calls out. Real findings from testing multiple candidates (see CLAUDE.md
+// "Reliability" for the full account): nvidia/nemotron-3-super-120b-a12b:free hung 18+ minutes
+// once; a smaller/faster model (google/gemma-4-26b-a4b-it:free) failed fast but only because
+// Google AI Studio's own shared free quota was exhausted upstream — availability, not latency,
+// is the problem there. cohere/north-mini-code:free is the one that actually produced excellent
+// output (a genuinely good draggable slope-explorer activity) when it succeeded, at variable
+// latency (60-120s+) — including a real, reproduced-in-production timeout past this app's own
+// 120s per-call limit, which is what prompted this switch.
 export const CODEGEN_MODEL = "cohere/north-mini-code:free";
 export const CODEGEN_FALLBACK_MODEL = "nvidia/nemotron-3-super-120b-a12b:free";
 
@@ -116,15 +115,15 @@ export const CODEGEN_FALLBACK_MODEL = "nvidia/nemotron-3-super-120b-a12b:free";
 export const TUTOR_MODEL = "liquid/lfm-2.5-2.6b:free";
 export const TUTOR_FALLBACK_MODEL = "nvidia/nemotron-3-super-120b-a12b:free";
 
-// Same escalation as USE_OPENAI_CODEGEN above, mirrored for the tutor role — off by default,
+// A dev/prod escalation for the tutor role specifically (codegen now runs on OpenAI always —
+// see OPENAI_CODEGEN_MODEL above; the tutor still defaults to the free tier) — off by default,
 // requires both USE_OPENAI_TUTOR=true and a real OPENAI_API_KEY. Real, paid API calls.
 const USE_OPENAI_TUTOR = process.env.USE_OPENAI_TUTOR === "true";
 const OPENAI_TUTOR_MODEL = process.env.OPENAI_TUTOR_MODEL ?? "gpt-4o-mini";
 
-export function codegenModel(modelId: string = CODEGEN_MODEL) {
-  if (USE_OPENAI_CODEGEN) return openai(OPENAI_CODEGEN_MODEL);
+export function codegenModel(modelId: string = OPENAI_CODEGEN_MODEL) {
   if (USE_LOCAL_OLLAMA) return ollama(OLLAMA_CODEGEN_MODEL);
-  return openrouter(modelId);
+  return openai(modelId);
 }
 
 export function tutorModel(modelId: string = TUTOR_MODEL) {
@@ -134,15 +133,13 @@ export function tutorModel(modelId: string = TUTOR_MODEL) {
 }
 
 /**
- * What actually ran, for Langfuse traces — without this, a trace would keep labeling every
- * generation "cohere/north-mini-code:free" even while USE_LOCAL_OLLAMA silently redirected the
- * real call to a completely different local model, which would be a misleading observability
- * record of what happened. Takes which role called it, since codegen and tutor use different
- * local models.
+ * What actually ran, for Langfuse traces — without this, a trace would mislabel what actually
+ * executed whenever USE_LOCAL_OLLAMA redirects to a local model, or (tutor role) USE_OPENAI_TUTOR
+ * escalates. Takes which role called it, since codegen and tutor use different providers/models.
  */
 export function effectiveModelId(requestedModelId: string, role: "codegen" | "tutor"): string {
-  if (role === "codegen" && USE_OPENAI_CODEGEN) return `openai:${OPENAI_CODEGEN_MODEL}`;
   if (role === "tutor" && USE_OPENAI_TUTOR) return `openai:${OPENAI_TUTOR_MODEL}`;
-  if (!USE_LOCAL_OLLAMA) return requestedModelId;
-  return `ollama:${role === "codegen" ? OLLAMA_CODEGEN_MODEL : OLLAMA_TUTOR_MODEL}`;
+  if (USE_LOCAL_OLLAMA) return `ollama:${role === "codegen" ? OLLAMA_CODEGEN_MODEL : OLLAMA_TUTOR_MODEL}`;
+  if (role === "codegen") return `openai:${requestedModelId}`;
+  return requestedModelId;
 }

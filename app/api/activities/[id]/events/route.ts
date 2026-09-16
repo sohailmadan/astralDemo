@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { createServiceClient } from "@/lib/supabase/service";
+import { isValidUuid } from "@/lib/validate/input";
 
 const MAX_PAYLOAD_BYTES = 10_000;
 
@@ -15,6 +16,9 @@ const MAX_PAYLOAD_BYTES = 10_000;
  */
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  if (!isValidUuid(id)) {
+    return NextResponse.json({ error: "Invalid activity id." }, { status: 400 });
+  }
   const body = await req.json().catch(() => null);
 
   if (!body || (body.kind !== "state" && body.kind !== "event")) {
@@ -69,6 +73,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
  */
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  if (!isValidUuid(id)) {
+    return NextResponse.json({ error: "Invalid activity id." }, { status: 400 });
+  }
   const supabase = createServiceClient();
 
   const [eventsResult, stateResult] = await Promise.all([
