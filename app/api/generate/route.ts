@@ -14,12 +14,11 @@ import { stripControlChars } from "@/lib/validate/input";
 // Vercel's actual serverless ceiling on the Hobby plan (confirmed live via a real deploy
 // attempt: "Serverless Functions must have a maxDuration between 1 and 300 for plan hobby" —
 // 800 was rejected outright, not silently clamped). 3 attempts at generateActivity.ts's
-// 180s-per-call timeout is 9 minutes worst case (see MAX_TOTAL_MINUTES in
-// lib/generation-constants.ts) — over this 300s/5min ceiling in the rare worst case where every
-// attempt needs a repair and each takes the full per-call timeout (Vercel kills the function
-// mid-run then, leaving the row stuck in "generating" — a known gap, see README "What I'd
-// improve"). The typical case (one attempt, tens of seconds with gpt-5-mini) is comfortably
-// under it — that's what actually happens almost always. A Pro plan raises this to 800+.
+// 90s-per-call timeout is 4.5 minutes worst case (see MAX_TOTAL_MINUTES in
+// lib/generation-constants.ts) — genuinely fits this 300s/5min ceiling even in that rare worst
+// case (every attempt needs a repair and each takes the full per-call timeout), not just the
+// typical case (one attempt, well under a minute with gpt-5-mini). A Pro plan raises this to
+// 800+.
 export const maxDuration = 300;
 
 export async function POST(req: Request) {

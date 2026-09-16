@@ -14,7 +14,7 @@ export const MAX_PROMPT_LENGTH = 500;
 // Matches generateActivity.ts's abortSignal timeout (in seconds). Used only to derive an honest
 // worst-case total below — never shown to the user directly as a per-attempt promise, since
 // real per-attempt latency varies too much for that to read as anything but wrong.
-const TYPICAL_ATTEMPT_SECONDS = 180;
+const TYPICAL_ATTEMPT_SECONDS = 90;
 
 // Worst case if every attempt runs the full timeout, rounded up — a static bound derived from
 // the pipeline's real constants, not a number picked to sound reassuring.

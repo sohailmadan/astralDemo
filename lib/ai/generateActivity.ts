@@ -272,16 +272,16 @@ Fix only what's broken and return the corrected activity in full.`
         schema: ActivityGenerationSchema,
         system: SYSTEM_PROMPT,
         prompt: userContent,
-        // 180s per attempt. Found directly in production: gpt-5-mini (this app's actual codegen
-        // model, see openrouter.ts) genuinely needs more than 120s against this system prompt's
-        // real size plus a full TSX component as JSON output — a real, reproduced timeout, not
-        // a stuck/hung call. 180s gives it realistic room without being unbounded. 3 attempts at
-        // 180s each is 9 minutes worst case (see MAX_TOTAL_MINUTES in lib/generation-constants.ts,
-        // which this must stay in sync with) — over Vercel's 300s/5min Hobby ceiling in that rare
-        // worst case (every attempt needs a repair AND each takes the full timeout), same accepted
-        // trade-off already documented on maxDuration in app/api/generate/route.ts. The typical
-        // case (one attempt succeeds well under this) is what actually matters day to day.
-        abortSignal: AbortSignal.timeout(180_000),
+        // 90s per attempt. With reasoningEffort: "low" below, every real call measured against
+        // this exact system prompt finished in 50-66s (multiple runs, both the isolated model
+        // call and the full generateActivityCode pipeline) — 90s is ~40% headroom above the
+        // slowest of those, not a guess. (An earlier version of this comment set 180s, sized
+        // before reasoningEffort was tuned down from its slow default — no longer the real
+        // number, see that option's own comment below.) 3 attempts at 90s each is 4.5 minutes
+        // worst case, rounded up in MAX_TOTAL_MINUTES (lib/generation-constants.ts, which this
+        // must stay in sync with) — genuinely fits Vercel's 300s/5min Hobby ceiling even in that
+        // rare worst case now, unlike the wider timeout this replaced.
+        abortSignal: AbortSignal.timeout(90_000),
         repairText: repairModelJson,
         // OpenAI's strict structured-outputs mode (the @ai-sdk/openai provider's default)
         // requires every property in the schema to appear in JSON Schema's `required` array —
