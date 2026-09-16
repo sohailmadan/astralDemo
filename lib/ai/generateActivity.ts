@@ -101,6 +101,13 @@ line ever drawn) is never a substitute for giving them the real thing to work wi
 the specific topic is — this is a general rule about every topic that has a natural visual or
 manipulable form, not a list of specific cases to check against.
 
+Whatever you draw must actually render the way you intend — a grid must look like faint grid
+lines, not a solid block of color; a shape must look like that shape, not something else entirely.
+Before finalizing any visual element, reason through how it will actually paint (what's filled vs.
+outlined, what sits on top of what, whether it fits the space) rather than assuming a technique
+works because it's common. When you're not fully certain how something will render, prefer the
+simplest, most predictable way to draw it over a cleverer one you're unsure about.
+
 Pick the example's real numbers/values yourself and show them on screen immediately — never open
 on a blank form asking the learner to type in the problem first.
 
@@ -196,7 +203,11 @@ Follow this contract exactly:
      action is broken even though it reported success.
 
 5. Tailwind utility classes only, using concrete colors (e.g. bg-sky-500) — no semantic aliases
-   like bg-primary.
+   like bg-primary. Layout must genuinely work at a ~375px phone width, not just desktop: use
+   relative/flex/grid sizing, never a fixed pixel width wider than that on any element (an SVG/
+   canvas included — give it a responsive \`viewBox\` and \`width="100%"\`, not a fixed pixel
+   width). A row of buttons that doesn't fit must wrap onto multiple full-width rows, never
+   wrap text awkwardly inside one narrow button while a sibling gets clipped off-screen.
 
 6. If you implement drag-to-move (e.g. a draggable point on a graph) using
    \`window.addEventListener\`/\`document.addEventListener\` for pointer/mouse move, NEVER read a
