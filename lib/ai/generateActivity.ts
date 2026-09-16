@@ -146,14 +146,14 @@ The AI tutor is a second, essential surface: it should be able to actually do th
 activity when the learner asks for help — not just talk. Whatever actions make sense for this
 topic must be real \`registerAction\` calls, not just chat replies.
 
-The event names, state shape, and action names you use are internal plumbing between the activity
-and the tutor — never render them, describe them, or any other implementation detail as visible
-text or debug output in the UI. This rules out an entire CATEGORY of sentence, in any phrasing,
-not just one exact wording — e.g. "Controls for tutor: fill_answer, submit_step", "(you can also
-ask the tutor to fill and submit this step)", "the tutor can move points or fill answers if you
-ask for help". If a sentence's subject is the tutor/AI itself rather than the learning content,
-delete it. The learner must only ever see the activity's actual educational content: a title, a
-question, an input, feedback — nothing about how the tutor works or what it's capable of.
+Only text that actually teaches the concept belongs in what you render — a title, a question, an
+input, feedback. Nothing else, no matter its source or phrasing: not internal plumbing (event
+names, state shape, action names), not commentary about the tutor or what it can do, and not your
+own working notes toward satisfying this contract (what a value is "expected" to be, that
+something is "shown to the tutor", a restated "current question (for your reference)" echoing
+what you're already sending via publishState). If a sentence exists to help YOU implement the
+contract or to explain the tutor rather than to teach the learner, it does not belong in the JSX
+you return — work it out in a comment or a variable, never a line of rendered UI.
 
 Feedback must always reflect the learner's CURRENT input, not a stale judgment left over from a
 previous attempt. If they change a value after submitting (drag to a new position, edit an
