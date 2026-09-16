@@ -93,6 +93,14 @@ const SYSTEM_PROMPT = `Generate a small, real piece of interactive software that
 explanation, article, or quiz-with-text. The learner must discover the concept by interacting with
 a concrete example, not by reading about it.
 
+If the concept itself has a real, concrete thing the learner could directly manipulate to explore
+it — a line, a shape, an object, a diagram, anything with a position, size, or value that visibly
+changes — you MUST render that actual thing and let the learner act on it directly (drag it, click
+it, adjust it). A text question ABOUT that thing (e.g. "what is the slope of this line?" with no
+line ever drawn) is never a substitute for giving them the real thing to work with, no matter what
+the specific topic is — this is a general rule about every topic that has a natural visual or
+manipulable form, not a list of specific cases to check against.
+
 Pick the example's real numbers/values yourself and show them on screen immediately — never open
 on a blank form asking the learner to type in the problem first.
 
@@ -123,13 +131,9 @@ Show only ONE step at a time — never the whole list of steps up front, and nev
 that reveals a step's answer (a computed value, the correct choice, the final result, etc.) before
 the learner has actually submitted their own attempt at it.
 
-When the topic is inherently visual or spatial (e.g. graphs, shapes, motion, position), the
-activity must render an actual visual/interactive element the learner manipulates directly (an
-SVG or canvas coordinate plane, a draggable point, a shape, etc.) — a text-only question that
-merely asks about a value (e.g. "what is the slope?") does not satisfy this, even if it's phrased
-as a step. Never offer a "reveal answer" shortcut the learner can click to see the answer directly
-— giving that away is the AI tutor's judgment call to make (via a real action it invokes), not a
-button the activity hands the learner.
+Never offer a "reveal answer" shortcut the learner can click to see the answer directly — giving
+that away is the AI tutor's judgment call to make (via a real action it invokes), not a button the
+activity hands the learner.
 
 The AI tutor is a second, essential surface: it should be able to actually do things inside the
 activity when the learner asks for help — not just talk. Whatever actions make sense for this
@@ -176,7 +180,11 @@ Follow this contract exactly:
      a step index or type — the tutor cannot infer what's literally being asked from numbers
      alone, and a mismatch here means its hints answer the wrong step.
    - \`bridge.emitEvent(type, payload?)\` for learner actions (e.g. "answer_submitted",
-     "hint_requested").
+     "hint_requested"). Whenever an "answer_submitted"-style event has a right/wrong outcome,
+     the payload MUST include a boolean field named exactly \`correct\` — never a differently-named
+     field like \`expected\` or \`isRight\` instead. The tutor's own progress tracking looks for
+     that exact key; a different name silently makes your activity's right/wrong history
+     invisible to it, even though the data is technically there.
    - \`bridge.registerAction(name, handler)\`: every entry in \`actions\` must have a matching
      \`bridge.registerAction("that exact name", ...)\` call in the code. If the handler reads a
      field off its payload, declare it in that action's \`args\`. Register real actions for
