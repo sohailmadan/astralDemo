@@ -11,7 +11,7 @@ export default async function GeneratePage() {
   const activities = await listActivities();
 
   return (
-    <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-10 px-5 py-12">
+    <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-8 px-5 py-12">
       <header className="flex flex-col gap-2">
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">
           What do you want to learn?
@@ -19,16 +19,20 @@ export default async function GeneratePage() {
         <p className="text-sm text-muted-foreground">{APP_TAGLINE}</p>
       </header>
 
-      <PromptForm />
-
-      <section className="flex min-h-0 flex-1 flex-col gap-3">
-        <h2 className="text-sm font-medium text-muted-foreground">
-          Your activities
-        </h2>
-        <div className="max-h-[60vh] overflow-y-auto rounded-lg">
-          <ActivityList initialActivities={activities} />
+      <div className="flex flex-1 flex-col gap-8 lg:flex-row">
+        <div className="lg:w-96 lg:shrink-0">
+          <PromptForm />
         </div>
-      </section>
+
+        <section className="flex min-h-0 flex-1 flex-col gap-3">
+          <h2 className="text-sm font-medium text-muted-foreground">
+            Your activities
+          </h2>
+          <div className="max-h-[70vh] overflow-y-auto rounded-lg lg:max-h-none">
+            <ActivityList initialActivities={activities} />
+          </div>
+        </section>
+      </div>
     </main>
   );
 }
